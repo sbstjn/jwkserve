@@ -1,0 +1,111 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: |
+            x86_64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            src/target/
+          key: test-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Test
+        run: cargo test --manifest-path ./src/Cargo.toml
+
+  build-arm:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: |
+            aarch64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            src/target/
+          key: arm-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Build ARM
+        run: cargo zigbuild --release -p jwkserve-cli --manifest-path ./src/Cargo.toml --target aarch64-unknown-linux-gnu
+
+      - name: Upload ARM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jwkserve-cli-arm
+          path: src/target/aarch64-unknown-linux-gnu/release/jwkserve
+
+  build-x86:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: |
+            x86_64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            src/target/
+          key: x86-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Build X86
+        run: cargo zigbuild --release -p jwkserve-cli --manifest-path ./src/Cargo.toml --target x86_64-unknown-linux-gnu
+
+      - name: Upload X86 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jwkserve-cli-x86
+          path: src/target/x86_64-unknown-linux-gnu/release/jwkserve
