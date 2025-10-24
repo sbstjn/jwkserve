@@ -1,5 +1,5 @@
-use jwkserve::{Router, RouterState, key::KeyStore};
-use poem::{Server, listener::TcpListener};
+use jwkserve::{key::Key, Router, RouterState};
+use poem::{listener::TcpListener, Server};
 use std::{env, io::Error};
 use tokio::signal;
 
@@ -21,9 +21,9 @@ async fn main() -> Result<(), Error> {
         Err(_) => "3000".to_string(),
     };
 
-    let key_store: KeyStore = match env::var("KEY_FILE") {
-        Ok(key_path) => KeyStore::from_file(&key_path),
-        Err(_) => KeyStore::new(),
+    let key: Key = match env::var("KEY_FILE") {
+        Ok(key_path) => Key::from_file(&key_path),
+        Err(_) => Key::new(),
     };
 
     let issuer: String = match env::var("WEB_ISSUER") {
@@ -31,9 +31,9 @@ async fn main() -> Result<(), Error> {
         Err(_) => format!("http://{host}:{port}"),
     };
 
-    let router_state = RouterState { issuer, key_store };
+    let router_state = RouterState { issuer, key };
 
-    let router = Router::with_state(router_state).await?;
+    let router = Router::with_state(router_state);
 
     Server::new(TcpListener::bind(format!("{host}:{port}")))
         .name("jwkserve".to_string())
