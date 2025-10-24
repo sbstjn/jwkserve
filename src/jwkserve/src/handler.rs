@@ -1,5 +1,6 @@
 use std::env::consts;
 
+use crate::RouterState;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use poem::{
     handler,
@@ -7,8 +8,6 @@ use poem::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-
-use crate::RouterState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GenericClaims {
@@ -35,9 +34,8 @@ pub fn response_index() -> Json<serde_json::Value> {
 
 #[handler]
 pub fn response_jwks(state: Data<&RouterState>) -> Json<serde_json::Value> {
-    let kid = state.key.generate_kid();
     let signing_key = serde_json::json!({
-        "kid": kid,
+        "kid": state.key.generate_kid(),
         "kty": "RSA",
         "alg": "RS256",
         "use": "sig",
@@ -70,8 +68,7 @@ pub fn response_sign(
         .expect("Failed to create encoding key");
 
     let mut header = Header::new(Algorithm::RS256);
-    let kid = state.key.generate_kid();
-    header.kid = Some(kid);
+    header.kid = Some(state.key.generate_kid());
 
     let token = encode(&header, &claims.data, &encoding_key).expect("Failed to encode JWT");
 

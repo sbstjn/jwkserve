@@ -5,6 +5,7 @@ use poem::{
     middleware::{AddData, Tracing},
     post, EndpointExt, Route,
 };
+
 pub mod handler;
 pub mod key;
 
