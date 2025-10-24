@@ -78,7 +78,12 @@ mod tests {
         );
 
         // sign endpoint works with empty claims
-        let resp = client.post("/sign").body("{}").send().await;
+        let resp = client
+            .post("/sign")
+            .header("Content-Type", "application/json")
+            .body("{}")
+            .send()
+            .await;
         assert_eq!(resp.0.status(), 200);
         let json: serde_json::Value = resp.0.into_body().into_json().await.unwrap();
         assert!(json["token"].is_string());
