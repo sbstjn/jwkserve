@@ -68,8 +68,6 @@ $ > curl -X POST http://127.0.0.1:3000/sign \
 {"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
 ```
 
-> **Note:** The `iss` field in your request will be automatically corrected to match the `HOST` and `PORT` of the running service endpoint.
-
 ## Configuration
 
 You can configure the service using environment variables:
