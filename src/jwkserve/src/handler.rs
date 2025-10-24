@@ -62,7 +62,6 @@ pub fn response_sign(
     req: Json<GenericClaims>,
 ) -> Json<serde_json::Value> {
     let mut claims = req.0;
-    claims.set_issuer(state.issuer.clone());
 
     let encoding_key = EncodingKey::from_rsa_pem(state.key.to_pkcs8_pem().as_bytes())
         .expect("Failed to create encoding key");
