@@ -34,7 +34,7 @@ pub fn response_index() -> Json<serde_json::Value> {
 }
 
 #[handler]
-pub fn response_jwks(state: Data<&std::sync::Arc<RouterState>>) -> Json<serde_json::Value> {
+pub fn response_jwks(state: Data<&RouterState>) -> Json<serde_json::Value> {
     let kid = state.key.generate_kid();
     let signing_key = serde_json::json!({
         "kid": kid,
@@ -51,7 +51,7 @@ pub fn response_jwks(state: Data<&std::sync::Arc<RouterState>>) -> Json<serde_js
 }
 
 #[handler]
-pub fn response_openid(state: Data<&std::sync::Arc<RouterState>>) -> Json<serde_json::Value> {
+pub fn response_openid(state: Data<&RouterState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "issuer": state.issuer,
         "jwks_uri": format!("{}/.well-known/jwks.json", state.issuer)
@@ -60,9 +60,9 @@ pub fn response_openid(state: Data<&std::sync::Arc<RouterState>>) -> Json<serde_
 
 #[handler]
 pub fn response_sign(
-    state: Data<&std::sync::Arc<RouterState>>,
+    state: Data<&RouterState>,
     req: Json<GenericClaims>,
-) -> poem::web::Json<serde_json::Value> {
+) -> Json<serde_json::Value> {
     let mut claims = req.0;
     claims.set_issuer(state.issuer.clone());
 
@@ -75,5 +75,5 @@ pub fn response_sign(
 
     let token = encode(&header, &claims.data, &encoding_key).expect("Failed to encode JWT");
 
-    poem::web::Json(serde_json::json!({ "token": token }))
+    Json(serde_json::json!({ "token": token }))
 }

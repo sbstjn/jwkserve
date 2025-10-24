@@ -5,14 +5,12 @@ use poem::{
     middleware::{AddData, Tracing},
     post, EndpointExt, Route,
 };
-use std::sync::Arc;
 pub mod handler;
 pub mod key;
 
 pub struct Router {
-    pub poem: poem::middleware::TracingEndpoint<
-        poem::middleware::AddDataEndpoint<Route, Arc<RouterState>>,
-    >,
+    pub poem:
+        poem::middleware::TracingEndpoint<poem::middleware::AddDataEndpoint<Route, RouterState>>,
 }
 
 #[derive(Clone)]
@@ -23,8 +21,6 @@ pub struct RouterState {
 
 impl Router {
     pub fn with_state(state: RouterState) -> Self {
-        let state = Arc::new(state);
-
         let router = Route::new()
             .at("/", get(response_index))
             .at("/.well-known/jwks.json", get(response_jwks))
