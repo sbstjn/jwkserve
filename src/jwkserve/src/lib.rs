@@ -25,6 +25,7 @@ impl Router {
             .at("/", get(response_index))
             .at("/.well-known/jwks.json", get(response_jwks))
             .at("/.well-known/openid-configuration", get(response_openid))
+            .at("/protocol/openid-connect/certs", get(response_jwks))
             .at("/sign", post(response_sign))
             .with(AddData::new(state))
             .with(Tracing);
