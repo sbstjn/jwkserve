@@ -16,6 +16,10 @@ pub struct GenericClaims {
 }
 
 impl GenericClaims {
+    pub fn has_issuer(&self) -> bool {
+        self.data.contains_key("iss")
+    }
+
     pub fn set_issuer(&mut self, issuer: String) {
         self.data.insert("iss".to_string(), Value::String(issuer));
     }
@@ -62,6 +66,10 @@ pub fn response_sign(
     req: Json<GenericClaims>,
 ) -> Json<serde_json::Value> {
     let mut claims = req.0;
+
+    if !claims.has_issuer() {
+        claims.set_issuer(state.issuer.clone());
+    }
 
     let encoding_key = EncodingKey::from_rsa_pem(state.key.to_pkcs8_pem().as_bytes())
         .expect("Failed to create encoding key");

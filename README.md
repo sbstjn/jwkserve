@@ -68,6 +68,8 @@ $ > curl -X POST http://127.0.0.1:3000/sign \
 {"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
 ```
 
+> **Note:** If the `iss` field is not set in your request, it will be automatically added matching the `WEB_ISSUER` envionment variable.
+
 ## Configuration
 
 You can configure the service using environment variables:
