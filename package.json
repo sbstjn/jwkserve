@@ -1,5 +1,6 @@
 {
   "name": "jwkserve",
+  "private": true,
   "version": "0.0.0",
   "description": "A fake authentication service for local development",
   "author": "Sebastian Müller",
