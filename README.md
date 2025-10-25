@@ -13,7 +13,7 @@ Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/reposito
 
 ## Common JWKS Flow
 
-Assuming, you are writing a backend application and need to validate a JWT access token using JWKS, this is what you need to do when receiving a JWT access token:
+Assuming, you are writing a backend application and need to validate a JWT access token using JWKS, this is what you need to do (according to [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) and [RFC 7517](https://datatracker.ietf.org/doc/html/rfc7517) when dealing a JWT access token:
 
 * Verify the token contains two period separators, and
 * Split the token into `Header.Payload.Signature` values.
