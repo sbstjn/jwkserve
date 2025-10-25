@@ -50,7 +50,7 @@ $ > curl -X POST http://localhost:3000/sign \
 {"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
 ```
 
-> **Note:** If the `iss` field is not set in your request, it will be automatically added matching the `WEB_ISSUER` envionment variable.
+> **Note:** If the `iss` field is not set in your request, it will be automatically added matching the `WEB_ISSUER` environment variable.
 
 ## Configuration
 

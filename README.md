@@ -2,7 +2,7 @@
 
 > A fake authentication service to speed up local development for JWT consumers.
 
-**Use Case:** When building applications with an JWT authentication based on JWKS, it can be annoying to run real integration tests, especially locally or in pipelines, because it involves the usage of an existing identity provider. Using `jwkserve` you can easily generate JWT access tokens (for any combination of claims) and serve the JWKS relevant URL endpoints for easy integration.
+**Use Case:** When building applications with a JWT authentication based on JWKS, it can be annoying to run real integration tests, especially locally or in pipelines, because it involves the usage of an existing identity provider. Using `jwkserve` you can easily generate JWT access tokens (for any combination of claims) and serve the JWKS relevant URL endpoints for easy integration.
 
 Dedicated README files are available for:
 
@@ -24,7 +24,7 @@ Assuming, you are writing a backend application and need to validate a JWT acces
 * Fetch the provided JWKS Endpoint (usually at `/.well-known/jwks.json`), and
 * Parse JSON structure and retrieve key with `kid` from JWT `Header` .
 
-When writing automated tests for valid or invalid authentication (and maybe authorization) flows, it can become quite annoying to allways have a __real__ identity provider in place. That's where `jwkserve` comes in handy: `jwkserve` serves the needed endpoints and allows easy generation of generic claims and token structures.
+When writing automated tests for valid or invalid authentication (and maybe authorization) flows, it can become quite annoying to always have a __real__ identity provider in place. That's where `jwkserve` comes in handy: `jwkserve` serves the needed endpoints and allows easy generation of generic claims and token structures.
 
 ## Installation
 
@@ -41,7 +41,7 @@ $ > docker pull sbstjn/jwkserve:latest
 
 ## Usage
 
-Regardless of how you use `jwkserve` , you need to know it's used hostname and port. You need to configure your backend to allow access tokens from this issuer (in whatever your existing logic for this is hopefully already in place) and then, you can generate valid JWT access tokens:
+Regardless of how you use `jwkserve` , you need to know its used hostname and port. You need to configure your backend to allow access tokens from this issuer (in whatever your existing logic for this is hopefully already in place) and then, you can generate valid JWT access tokens:
 
 ```bash
 $ > curl -X POST http://localhost:3000/sign \
@@ -86,7 +86,7 @@ $ > docker build \
 
 ## Container
 
-Afer building locally, you can run the container,
+After building locally, you can run the container,
 
 ```bash
 $ > docker run -it \

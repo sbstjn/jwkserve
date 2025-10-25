@@ -2,7 +2,7 @@
 
 A fake authentication service to speed up local development for JWT consumers.
 
-This library is the core of [jwkserve-cli](https://crates.io/crates/jwkserve-cli). Use this library if you need a `poem` router that acts as an JWT / JWKS compatible authentication server.
+This library is the core of [jwkserve-cli](https://crates.io/crates/jwkserve-cli). Use this library if you need a `poem` router that acts as a JWT / JWKS compatible authentication server.
 
 Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/repository/docker/sbstjn/jwkserve/general) and contribution is possible via [sbstjn/jwkserve on GitHub](https://github.com/sbstjn/jwkserve).
 
@@ -56,4 +56,4 @@ let json: serde_json::Value = serde_json::from_str(&body).unwrap();
 let token = json.get("token").unwrap().as_str().unwrap();
 ```
 
-Now you can easily test you JWT authentication and authorization; including a full JWKS request flow.
+Now you can easily test your JWT authentication and authorization; including a full JWKS request flow.
