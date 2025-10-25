@@ -4,6 +4,8 @@ A fake authentication service to speed up local development for JWT consumers.
 
 This library is the core of [jwkserve-cli](https://crates.io/crates/jwkserve-cli). Use this library if you need a `poem` router that acts as an JWT / JWKS compatible authentication server.
 
+Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/repository/docker/sbstjn/jwkserve/general) and contribution is possible via [sbstjn/jwkserve on GitHub](https://github.com/sbstjn/jwkserve).
+
 ```rust
 use jwkserve::{key::Key, Router, RouterState};
 use poem::{listener::TcpListener, Server};

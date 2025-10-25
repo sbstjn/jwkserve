@@ -2,7 +2,9 @@
 
 > A fake authentication service to speed up local development for JWT consumers.
 
-Dedicated README files available for:
+**Use Case:** When building applications with an JWT authentication based on JWKS, it can be annoying to run real integration tests, especially locally or in pipelines, because it involves the usage of an existing identity provider. Using `jwkserve` you can easily generate JWT access tokens (for any combination of claims) and serve the JWKS relevant URL endpoints for easy integration.
+
+Dedicated README files are available for:
 
 * [jwkserve-cli](./src/jwkserve-cli/README.md)
 * [jwkserve](./src/jwkserve/README.md)
@@ -12,11 +14,14 @@ Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/reposito
 ## Installation
 
 ```bash
-# Install binary
+# Install jwkserve binary
 $ > cargo install jwkserve-cli
 
-# Install Library
+# Install jwkserve Library
 $ > cargo add jwkserve
+
+# Download jwkserve container
+$ > docker pull sbstjn/jwkserve:latest
 ```
 
 ## Build
@@ -73,5 +78,6 @@ services:
 ```bash
 $ > cargo +nightly tarpaulin \
     --verbose --all-features --workspace --timeout 120 \
+    --manifest-path ./src/Cargo.toml \
     --out xml
 ```
