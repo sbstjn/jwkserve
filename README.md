@@ -1,5 +1,9 @@
 # JWKServe
 
+[![crates.io](https://img.shields.io/crates/v/jwkserve-cli.svg)](https://crates.io/crates/jwkserve-cli)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.md)
+[![Docker Image Version](https://img.shields.io/docker/v/sbstjn/jwkserve?label=docker&color=%231D63ED)](https://hub.docker.com/repository/docker/sbstjn/jwkserve)
+
 > A fake authentication service to speed up local development for JWT consumers.
 
 **Use Case:** When building applications with a JWT authentication based on JWKS, it can be annoying to run real integration tests, especially locally or in pipelines, because it involves the usage of an existing identity provider. Using `jwkserve` you can easily generate JWT access tokens (for any combination of claims) and serve the JWKS relevant URL endpoints for easy integration.
