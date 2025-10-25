@@ -88,6 +88,8 @@ $ > curl http://localhost:3000/.well-known/jwks.json
 }
 ```
 
+On startup, `jwkserve` generates a new random key; if you need a persistent public key, you can pass a **PKCS8 .pem file** via `KEY_FILE` environment variable. More about this on the [jwkserve-cli README.md file](./src/jwkserve-cli/README.md).
+
 ## Build
 
 You can build arm and x86 binaries:
