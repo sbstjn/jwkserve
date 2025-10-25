@@ -67,3 +67,11 @@ services:
     ports:
       - 3000:3000
 ```
+
+## Code Coverage
+
+```bash
+$ > cargo +nightly tarpaulin \
+    --verbose --all-features --workspace --timeout 120 \
+    --out xml
+```
