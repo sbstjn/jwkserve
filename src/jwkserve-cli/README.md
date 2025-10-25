@@ -9,6 +9,8 @@ This HTTP server provides several endpoints for JWT development:
 - `GET /.well-known/jwks.json` - JSON Web Key Set
 - `POST /sign` - Generate JWT tokens
 
+Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/repository/docker/sbstjn/jwkserve/general).
+
 ## Installation
 
 ```bash
