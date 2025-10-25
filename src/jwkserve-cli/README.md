@@ -7,7 +7,6 @@ This HTTP server provides several endpoints for JWT development:
 - `GET /` - Health check and service status
 - `GET /.well-known/openid-configuration` - OpenID Connect discovery
 - `GET /.well-known/jwks.json` - JSON Web Key Set
-- `GET /protocol/openid-connect/certs` - JSON Web Key Set
 - `POST /sign` - Generate JWT tokens
 
 Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/repository/docker/sbstjn/jwkserve/general) for easy usage. See [jwkserve](https://crates.io/crates/jwkserve) for the library; contribution is possible via [sbstjn/jwkserve on GitHub](https://github.com/sbstjn/jwkserve).
@@ -28,7 +27,6 @@ $ > jwkserve
 $ > curl http://localhost:3000/
 $ > curl http://localhost:3000/.well-known/jwks.json
 $ > curl http://localhost:3000/.well-known/openid-configuration
-$ > curl http://localhost:3000/protocol/openid-connect/certs
 ```
 
 ## Token Generation
