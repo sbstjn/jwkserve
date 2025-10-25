@@ -37,7 +37,6 @@ Of course, you can use this with the `poem` test client as well:
 ```rust
 let client = poem::test::TestClient::new(&router.poem);
 
-// sign endpoint should NOT overwrite issuer
 let claims = serde_json::json!({
     "iss": "http://localhost:3000",
     "custom_field": "preserved"
@@ -49,4 +48,10 @@ let resp = client
     .body(serde_json::to_string(&claims).unwrap())
     .send()
     .await;
+
+let body = resp.0.into_body().into_string().await.unwrap();
+let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+let token = json.get("token").unwrap().as_str().unwrap();
 ```
+
+Now you can easily test you JWT authentication and authorization; including a full JWKS request flow.
