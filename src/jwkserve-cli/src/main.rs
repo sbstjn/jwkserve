@@ -26,12 +26,7 @@ async fn main() -> Result<(), Error> {
         Err(_) => Key::new(),
     };
 
-    let issuer: String = match env::var("WEB_ISSUER") {
-        Ok(issuer) => issuer,
-        Err(_) => format!("http://{host}:{port}"),
-    };
-
-    let router_state = RouterState { issuer, key };
+    let router_state = RouterState { key };
 
     let router = Router::with_state(router_state);
 

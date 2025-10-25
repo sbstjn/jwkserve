@@ -57,7 +57,6 @@ You can configure the service using environment variables:
 - `APP_HOST` - HTTP listener host (default: `0.0.0.0`)
 - `APP_PORT` - HTTP listener port (default: `3000`)
 - `KEY_FILE` - Path to existing PKCS8 private key file (optional)
-- `WEB_ISSUER` - HTTP address for issuer (default: `http://${APP_HOST}:${APP_PORT}`)
 
 On start, the binary will generate a random 2048-bit RSA private key if no `KEY_FILE` is provided.
 

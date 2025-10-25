@@ -15,7 +15,6 @@ use tokio::signal;
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let router_state = RouterState {
-        issuer: format!("http://0.0.0.0:3000"),
         key: Key::new(),
     };
 

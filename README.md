@@ -127,7 +127,6 @@ After building locally, you can run the container,
 ```bash
 $ > docker run -it \
     -e APP_PORT=3000 \
-    -e WEB_ISSUER=http://localhost:4000 \
     -p 4000:3000 \
     jwkserve:latest
 ```
