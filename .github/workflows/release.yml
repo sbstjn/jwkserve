@@ -136,7 +136,7 @@ jobs:
           version: 0.13.0
 
       - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild
+        run: cargo install cargo-zigbuild || true
 
       - name: Install Cargo Set-Version
         run: cargo install cargo-set-version || true
@@ -184,7 +184,7 @@ jobs:
           version: 0.13.0
 
       - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild
+        run: cargo install cargo-zigbuild || true
 
       - name: Install Cargo Set-Version
         run: cargo install cargo-set-version || true
