@@ -58,7 +58,35 @@ $ > curl -X POST http://localhost:3000/sign \
 {"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
 ```
 
-In general, `jwkserve` is a token vending machine and blindly signs any payload as a valid JWT access token. This speeds up the process of writing integration tests in easy and especially complex scenarios with custom claims.
+In general, `jwkserve` is a token vending machine and blindly signs any payload as a valid JWT access token. This speeds up the process of writing integration tests in easy and __especially__ complex scenarios with different custom claims.
+
+To enable the needed JWKS flow, `jwkserve` is serving two endpoints:
+
+```bash
+# OpenID Discovery Endpoint
+$ > curl http://localhost:3000/.well-known/openid-configuration
+
+{
+  "issuer": "http://localhost:3000",
+  "jwks_uri": "http://localhost:3000/.well-known/jwks.json"
+}
+
+# JWKS Key
+$ > curl http://localhost:3000/.well-known/jwks.json
+
+{
+  "keys": [
+    {
+      "alg": "RS256",
+      "e": "AQAB",
+      "kid": "vB_ZfJ5y5E5PPMBUyaZxoPcmKxgaclK6ImLI-YkheEs",
+      "kty": "RSA",
+      "n": "2x2LkXrzc2DLo7tytA0ZfBq4KWpctpe67SWL7gcfDfG7mlKXTd6Rg05Hts8i7gLPCKb-iFKpm57n …",
+      "use": "sig"
+    }
+  ]
+}
+```
 
 ## Build
 
