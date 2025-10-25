@@ -1,8 +1,8 @@
 # JWKServe
 
 [![crates.io](https://img.shields.io/crates/v/jwkserve-cli.svg)](https://crates.io/crates/jwkserve-cli)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.md)
 [![Docker Image Version](https://img.shields.io/docker/v/sbstjn/jwkserve?label=docker&color=%231D63ED)](https://hub.docker.com/repository/docker/sbstjn/jwkserve)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.md)
 [![CI](https://github.com/sbstjn/jwkserve/actions/workflows/release.yml/badge.svg)](https://github.com/sbstjn/jwkserve/actions/workflows/release.yml)
 [![CI](https://github.com/sbstjn/jwkserve/actions/workflows/build.yml/badge.svg)](https://github.com/sbstjn/jwkserve/actions/workflows/build.yml)
 
