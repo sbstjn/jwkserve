@@ -1,13 +1,19 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use jsonwebtoken::EncodingKey;
 use rsa::pkcs8::EncodePrivateKey;
 use rsa::{pkcs8::DecodePrivateKey, traits::PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Key {
-    pub key: RsaPrivateKey,
+    key: RsaPrivateKey,
+    encoding_key: Arc<EncodingKey>,
+    kid: String,
+    n: String,
+    e: String,
 }
 
 impl Default for Key {
@@ -17,10 +23,44 @@ impl Default for Key {
 }
 
 impl Key {
+    /// Helper function to pre-compute all cached values from an RSA key
+    fn compute_cached_values(key: &RsaPrivateKey) -> (Arc<EncodingKey>, String, String, String) {
+        // Pre-compute n and e
+        let e = URL_SAFE_NO_PAD.encode(key.e().to_bytes_be());
+        let n = URL_SAFE_NO_PAD.encode(key.n().to_bytes_be());
+
+        // Pre-compute kid from n, e, alg, and use
+        let mut hasher = Sha256::new();
+        hasher.update(n.as_bytes());
+        hasher.update(e.as_bytes());
+        hasher.update(b"RS256");
+        hasher.update(b"sig");
+        let kid = URL_SAFE_NO_PAD.encode(hasher.finalize());
+
+        // Pre-compute encoding key
+        let pem = key
+            .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+            .expect("Failed to encode private key")
+            .to_string();
+        let encoding_key = Arc::new(
+            EncodingKey::from_rsa_pem(pem.as_bytes()).expect("Failed to create encoding key"),
+        );
+
+        (encoding_key, kid, n, e)
+    }
+
     pub fn new() -> Self {
         let mut rng = rand::thread_rng();
         let key = RsaPrivateKey::new(&mut rng, 2048).expect("Failed to generate RSA key");
-        Self { key }
+        let (encoding_key, kid, n, e) = Self::compute_cached_values(&key);
+
+        Self {
+            key,
+            encoding_key,
+            kid,
+            n,
+            e,
+        }
     }
 
     pub fn from_file(file_path: &str) -> Self {
@@ -46,26 +86,38 @@ impl Key {
             panic!("Invalid PEM file format: {file_path}");
         }
 
+        let key = RsaPrivateKey::from_pkcs8_pem(&key_content).expect("Failed to parse private key");
+        let (encoding_key, kid, n, e) = Self::compute_cached_values(&key);
+
         Self {
-            key: RsaPrivateKey::from_pkcs8_pem(&key_content).expect("Failed to parse private key"),
+            key,
+            encoding_key,
+            kid,
+            n,
+            e,
         }
     }
 
-    pub fn generate_kid(&self) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(self.generate_n().as_bytes());
-        hasher.update(self.generate_e().as_bytes());
-        hasher.update(b"RS256");
-        hasher.update(b"sig");
-        URL_SAFE_NO_PAD.encode(hasher.finalize())
+    /// Returns a reference to the cached encoding key.
+    /// This eliminates the need to convert to PEM and re-parse on every request.
+    pub fn encoding_key(&self) -> &EncodingKey {
+        &self.encoding_key
     }
 
-    pub fn generate_e(&self) -> String {
-        URL_SAFE_NO_PAD.encode(self.key.e().to_bytes_be())
+    /// Returns a reference to the cached key ID (kid).
+    /// Pre-computed from SHA256(n + e + alg + use).
+    pub fn generate_kid(&self) -> &str {
+        &self.kid
     }
 
-    pub fn generate_n(&self) -> String {
-        URL_SAFE_NO_PAD.encode(self.key.n().to_bytes_be())
+    /// Returns a reference to the cached public exponent (e) in base64url format.
+    pub fn generate_e(&self) -> &str {
+        &self.e
+    }
+
+    /// Returns a reference to the cached modulus (n) in base64url format.
+    pub fn generate_n(&self) -> &str {
+        &self.n
     }
 
     pub fn public_key(&self) -> RsaPublicKey {

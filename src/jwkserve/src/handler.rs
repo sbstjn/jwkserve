@@ -1,7 +1,7 @@
 use std::env::consts;
 
 use crate::RouterState;
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use jsonwebtoken::{encode, Algorithm, Header};
 use poem::{
     handler,
     web::{Data, Json},
@@ -96,13 +96,11 @@ pub fn response_sign(
         claims.set_issuer(get_hostname_and_scheme(request));
     }
 
-    let encoding_key = EncodingKey::from_rsa_pem(state.key.to_pkcs8_pem().as_bytes())
-        .expect("Failed to create encoding key");
-
     let mut header = Header::new(Algorithm::RS256);
-    header.kid = Some(state.key.generate_kid());
+    header.kid = Some(state.key.generate_kid().to_string());
 
-    let token = encode(&header, &claims.data, &encoding_key).expect("Failed to encode JWT");
+    let token = encode(&header, &claims.data, state.key.encoding_key())
+        .expect("Failed to encode JWT");
 
     Json(serde_json::json!({ "token": token }))
 }

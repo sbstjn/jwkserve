@@ -19,18 +19,18 @@ Also available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/reposito
 
 ## Common JWKS Flow
 
-Assuming, you are writing a backend application and need to validate a JWT access token using JWKS, this is what you need to do (according to [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) and [RFC 7517](https://datatracker.ietf.org/doc/html/rfc7517) when dealing a JWT access token:
+When validating a JWT access token using JWKS per [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) and [RFC 7517](https://datatracker.ietf.org/doc/html/rfc7517):
 
-* Verify the token contains two period separators, and
-* Split the token into `Header.Payload.Signature` values.
-* Base64 decode `Header`, `Payload`, and `Signature` , then
-* Use `kid` in `Header` object as reference for needed key.
-* Use `iss` in `Payload` to fetch the Discovery Endpoint at `/.well-known/openid-configuration` , then
-* Parse JSON structure and use `jwks_uri` property as location for public keys.
-* Fetch the provided JWKS Endpoint (usually at `/.well-known/jwks.json`), and
-* Parse JSON structure and retrieve key with `kid` from JWT `Header` .
+* Verify the token contains two period separators
+* Split the token into `Header.Payload.Signature` values
+* Base64 decode `Header`, `Payload`, and `Signature`
+* Use `kid` in `Header` object as reference for needed key
+* Use `iss` in `Payload` to fetch the Discovery Endpoint at `/.well-known/openid-configuration`
+* Parse JSON structure and use `jwks_uri` property as location for public keys
+* Fetch the provided JWKS Endpoint (usually at `/.well-known/jwks.json`)
+* Parse JSON structure and retrieve key with `kid` from JWT `Header`
 
-When writing automated tests for valid or invalid authentication (and maybe authorization) flows, it can become quite annoying to always have a __real__ identity provider in place. That's where `jwkserve` comes in handy: `jwkserve` serves the needed endpoints and allows easy generation of generic claims and token structures.
+When writing automated tests for authentication and authorization flows, requiring a real identity provider adds complexity. `jwkserve` serves the needed endpoints and allows easy generation of generic claims and token structures.
 
 ## Installation
 
@@ -47,7 +47,7 @@ $ > docker pull sbstjn/jwkserve:latest
 
 ## Usage
 
-Regardless of how you use `jwkserve` , you need to know its used hostname and port. You need to configure your backend to allow access tokens from this issuer (in whatever your existing logic for this is hopefully already in place) and then, you can generate valid JWT access tokens:
+Configure your backend to allow access tokens from `jwkserve`'s issuer (hostname and port). Then generate valid JWT access tokens:
 
 ```bash
 $ > curl -X POST http://localhost:3000/sign \
@@ -64,7 +64,7 @@ $ > curl -X POST http://localhost:3000/sign \
 {"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
 ```
 
-In general, `jwkserve` is a token vending machine and blindly signs any payload as a valid JWT access token. This speeds up the process of writing integration tests in easy and __especially__ complex scenarios with different custom claims.
+`jwkserve` is a token vending machine that signs any payload as a valid JWT access token. This speeds up writing integration tests, especially in complex scenarios with different custom claims.
 
 To enable the needed JWKS flow, `jwkserve` is serving two endpoints:
 
@@ -110,7 +110,7 @@ $ > cargo zigbuild --release -p jwkserve-cli --manifest-path ./src/Cargo.toml \
     --target x86_64-unknown-linux-gnu
 ```
 
-You can build and multiarch docker container:
+Build a multiarch Docker container:
 
 ```bash
 # Docker Build
@@ -122,7 +122,7 @@ $ > docker build \
 
 ## Container
 
-After building locally, you can run the container,
+Run the container:
 
 ```bash
 $ > docker run -it \
@@ -133,7 +133,7 @@ $ > docker run -it \
 
 ### Docker Compose
 
-You can use `jwkserve` with docker compose as well:
+Use `jwkserve` with Docker Compose:
 
 ```yaml
 services:
