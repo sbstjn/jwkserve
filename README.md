@@ -1,7 +1,7 @@
 # JWKServe
 
 [![crates.io](https://img.shields.io/crates/v/jwkserve.svg)](https://crates.io/crates/jwkserve)
-[![Docker Image Version](https://img.shields.io/docker/v/sbstjn/jwkserve?label=docker&color=%231D63ED)](https://hub.docker.com/repository/docker/sbstjn/jwkserve)
+[![Docker Image Version](https://img.shields.io/docker/v/sbstjn/jwkserve?label=docker&color=%231D63ED)](https://hub.docker.com/r/sbstjn/jwkserve)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.md)
 [![CI](https://github.com/sbstjn/jwkserve/actions/workflows/release.yml/badge.svg)](https://github.com/sbstjn/jwkserve/actions/workflows/release.yml)
 [![CI](https://github.com/sbstjn/jwkserve/actions/workflows/build.yml/badge.svg)](https://github.com/sbstjn/jwkserve/actions/workflows/build.yml)
@@ -10,7 +10,7 @@
 
 **Use Case:** When building applications with JWT authentication based on JWKS, it can be annoying to run real integration tests, especially locally or in pipelines, because it involves using an existing identity provider. Using `jwkserve` you can easily generate JWT access tokens (for any combination of claims) and serve the JWKS relevant URL endpoints for easy integration.
 
-Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/repository/docker/sbstjn/jwkserve/general).
+Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve).
 
 ## Common JWKS Flow
 
