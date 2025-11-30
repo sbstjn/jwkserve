@@ -1,7 +1,5 @@
-src/target
-src/.cursor
-src/cobertura.xml
+target
+.cursor
+cobertura.xml
 .DS_Store
 
-.cursor
-CLAUDE.md

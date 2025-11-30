@@ -1,6 +1,9 @@
 services:
   jwkserve:
-    image: sbstjn/jwkserve:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: jwkserve
     ports:
-      - 3000:3000
+      - "4000:3000"
+    command: ["jwkserve", "serve", "--port", "3000", "--bind", "0.0.0.0", "--issuer", "http://localhost:4000"]

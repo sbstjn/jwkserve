@@ -1,0 +1,32 @@
+[package]
+name = "jwkserve"
+edition = "2021"
+version = "0.0.0"
+
+authors = ["Sebastian Müller"]
+description = "CLI tool for jwkserve - a fake authentication service for local development"
+license = "MIT"
+repository = "https://github.com/sbstjn/jwkserve"
+keywords = ["jwt", "jwks", "authentication", "development", "cli"]
+categories = ["authentication", "command-line-utilities", "development-tools", "development-tools::testing", "web-programming::http-server"]
+
+[dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
+thiserror = "2.0.17"
+rsa = "0.9"
+rand = "0.8"
+sha2 = "0.10"
+der = { version = "0.7", default-features = false, features = ["alloc"] }
+base64 = "0.22"
+aws-lc-rs = "1"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "signal"] }
+color-eyre = { version = "0.6", default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+axum = "0.8.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.145"
+jsonwebtoken = "9.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2.5"
+tower-http = { version = "0.6.7", features = ["cors", "trace"] }

@@ -1,6 +1,0 @@
-[workspace]
-resolver = "3"
-members = [ "jwkserve", "jwkserve-cli"]
-
-[workspace.package]
-version = "0.0.0"

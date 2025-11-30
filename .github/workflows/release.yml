@@ -26,11 +26,11 @@ jobs:
         with:
           path: |
             ~/.cargo/
-            src/target/
+            ~/target/
           key: cargo-test-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Test
-        run: cargo test --manifest-path ./src/Cargo.toml
+        run: cargo test
 
   crates-jwkserve:
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
         with:
           path: |
             ~/.cargo/
-            src/target/
+            ~/target/
           key: cargo-publish-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Cargo Set-Version
@@ -61,49 +61,10 @@ jobs:
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           VERSION=${TAG_NAME#v}
-          cargo set-version $VERSION --manifest-path ./src/Cargo.toml
+          cargo set-version $VERSION
           
       - name: Publish jwkserve library
         run: |
-          cd src/jwkserve
-          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-  crates-jwkserve-cli:
-    runs-on: ubuntu-latest
-    needs: [crates-jwkserve]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/
-            src/target/
-          key: cargo-publish-cli-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install Cargo Set-Version
-        run: cargo install cargo-set-version || true
-
-      - name: Set Version
-        run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG_NAME#v}
-          cargo set-version $VERSION --manifest-path ./src/Cargo.toml
-          
-      - name: Publish jwkserve-cli
-        run: |
-          cd src/jwkserve-cli
           cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -127,7 +88,7 @@ jobs:
         with:
           path: |
             ~/.cargo/
-            src/target/
+            ~/target/
           key: cargo-build-arm-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Zig
@@ -145,16 +106,16 @@ jobs:
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           VERSION=${TAG_NAME#v}
-          cargo set-version $VERSION --manifest-path ./src/Cargo.toml
+          cargo set-version $VERSION
 
       - name: Build ARM
-        run: cargo zigbuild --release -p jwkserve-cli --manifest-path ./src/Cargo.toml --target aarch64-unknown-linux-gnu
+        run: cargo zigbuild --release --target aarch64-unknown-linux-gnu
 
       - name: Upload ARM artifact
         uses: actions/upload-artifact@v4
         with:
           name: jwkserve-cli-arm
-          path: src/target/aarch64-unknown-linux-gnu/release/jwkserve
+          path: target/aarch64-unknown-linux-gnu/release/jwkserve
 
   build-x86:
     runs-on: ubuntu-latest
@@ -175,7 +136,7 @@ jobs:
         with:
           path: |
             ~/.cargo/bin/
-            src/target/
+            ~/target/
           key: cargo-build-x86-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Zig
@@ -193,16 +154,16 @@ jobs:
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           VERSION=${TAG_NAME#v}
-          cargo set-version $VERSION --manifest-path ./src/Cargo.toml
+          cargo set-version $VERSION
 
       - name: Build X86
-        run: cargo zigbuild --release -p jwkserve-cli --manifest-path ./src/Cargo.toml --target x86_64-unknown-linux-gnu
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu
 
       - name: Upload X86 artifact
         uses: actions/upload-artifact@v4
         with:
           name: jwkserve-cli-x86
-          path: src/target/x86_64-unknown-linux-gnu/release/jwkserve
+          path: target/x86_64-unknown-linux-gnu/release/jwkserve
 
   docker:
     needs: [build-arm, build-x86, test]
@@ -216,13 +177,13 @@ jobs:
         uses: actions/download-artifact@v4
         with: 
           name: jwkserve-cli-arm
-          path: ./src/target/aarch64-unknown-linux-gnu/release/
+          path: ./target/aarch64-unknown-linux-gnu/release/
 
       - name: Download X86 artifact
         uses: actions/download-artifact@v4
         with:
           name: jwkserve-cli-x86
-          path: ./src/target/x86_64-unknown-linux-gnu/release/
+          path: ./target/x86_64-unknown-linux-gnu/release/
 
       - name: Set up Docker
         uses: docker/setup-docker-action@v4
@@ -249,8 +210,8 @@ jobs:
 
       - name: Create build context
         run: |
-          mkdir -p build-context/src
-          cp -r src/target build-context/src
+          mkdir -p build-context
+          cp -r target build-context
           cp Dockerfile build-context/
 
       - name: Upload artifact
