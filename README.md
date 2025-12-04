@@ -8,13 +8,13 @@
 
 > A fake authentication service to speed up local development for JWT consumers.
 
-**Use Case:** When building applications with JWT authentication based on JWKS, it can be annoying to run real integration tests, especially locally or in pipelines, because it involves using an existing identity provider. Using `jwkserve` you can easily generate JWT access tokens (for any combination of claims) and serve the JWKS relevant URL endpoints for easy integration.
+I've been building applications with JWT authentication based on JWKS, and I've found it's annoying to run real integration tests, especially locally or in pipelines, because it involves using an existing identity provider. That's why I built `jwkserve` — it lets you easily generate JWT access tokens (for any combination of claims) and serves the JWKS endpoints you need for easy integration.
 
 Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve).
 
 ## Common JWKS Flow
 
-When validating a JWT access token using JWKS per [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) and [RFC 7517](https://datatracker.ietf.org/doc/html/rfc7517):
+When validating a JWT access token using JWKS per [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) and [RFC 7517](https://datatracker.ietf.org/doc/html/rfc7517), here's what typically happens:
 
 * Verify the token contains two period separators
 * Split the token into `Header.Payload.Signature` values
@@ -25,7 +25,7 @@ When validating a JWT access token using JWKS per [RFC 7519](https://datatracker
 * Fetch the provided JWKS Endpoint (usually at `/.well-known/jwks.json`)
 * Parse JSON structure and retrieve key with `kid` from JWT `Header`
 
-When writing automated tests for authentication and authorization flows, requiring a real identity provider adds complexity. `jwkserve` serves the needed endpoints and allows easy generation of generic claims and token structures.
+In my experience, when writing automated tests for authentication and authorization flows, requiring a real identity provider adds unnecessary complexity. That's where `jwkserve` comes in—it serves the needed endpoints and allows easy generation of generic claims and token structures.
 
 ## Installation
 
@@ -39,9 +39,9 @@ $ > docker pull sbstjn/jwkserve:latest
 
 ## Usage
 
-Basically, `jwkserve` is a token vending machine that signs any payload as a valid JWT access token. This speeds up writing integration tests, especially in complex scenarios with different custom claims. 
+Think of `jwkserve` as a token vending machine that signs any payload as a valid JWT access token. I've found it speeds up writing integration tests, especially in complex scenarios with different custom claims.
 
-Depending on the installation path, you can use the binary:
+Depending on how you've installed it, you can use the binary:
 
 ```bash
 # Use local binary
@@ -69,7 +69,7 @@ INFO Server listening on 0.0.0.0:3000 for issuer http://localhost:3000
 INFO Supported algorithms: [RS256]
 ```
 
-Now, you can generate valid JWT access tokens:
+Now you're ready to generate valid JWT access tokens! Here's how:
 
 ```bash
 $ > curl -X POST http://localhost:3000/sign \
@@ -82,12 +82,14 @@ $ > curl -X POST http://localhost:3000/sign \
         "sub": "user-12345"
     }'
 
-{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
+{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJteS1hcHAiLCJleHAiOjE3MzU2ODk2MDAsImlhdCI6MTcwNDA2NzIwMCwibmJmIjoxNzA0MDY3MjAwLCJzdWIiOiJ1c2VyLTEyMzQ1In0.signature_here"}
 ```
+
+That's it! You've got a valid JWT token. The token is complete and ready to use—I've just truncated the signature portion here for readability.
 
 ### JWKS Flow
 
-To enable the needed JWKS flow, `jwkserve` is serving two endpoints:
+To enable the full JWKS flow, `jwkserve` serves two endpoints you'll need:
 
 ```bash
 # OpenID Discovery Endpoint
@@ -115,7 +117,7 @@ $ > curl http://localhost:3000/.well-known/jwks.json
       "use": "sig",
       "kid": "vB_ZfJ5y5E5PPMBUyaZxoPcmKxgaclK6ImLI-YkheEs-RS256",
       "alg": "RS256",
-      "n": "2x2LkXrzc2DLo7tytA0ZfBq4KWpctpe67SWL7gcfDfG7mlKXTd6Rg05Hts8i7gLPCKb-iFKpm57n …",
+      "n": "2x2LkXrzc2DLo7tytA0ZfBq4KWpctpe67SWL7gcfDfG7mlKXTd6Rg05Hts8i7gLPCKb-iFKpm57n...",
       "e": "AQAB"
     }
   ]
@@ -124,7 +126,7 @@ $ > curl http://localhost:3000/.well-known/jwks.json
 
 ### Custom RSA Key
 
-By default, `serve` generates a new temporary RSA-2048 key on startup (~2s). For instant startup, use a persisted key:
+By default, `serve` generates a new temporary RSA-2048 key on startup, which takes about 2 seconds. That's fine for occasional use, but if you're restarting frequently during development, you'll want instant startup. For that, use a persisted key:
 
 ```bash
 # Generate key once, also available as key size 3072 and 4096
@@ -134,7 +136,7 @@ $ > jwkserve keygen --size 2048 --output key.pem
 $ > jwkserve serve --key key.pem
 ```
 
-For development, the test folder includes some fixtures:
+For development, I've included some fixtures in the test folder that you can use:
 
 ```bash
 $ > jwkserve serve --key tests/fixtures/example_2048.pem
@@ -142,7 +144,7 @@ $ > jwkserve serve --key tests/fixtures/example_2048.pem
 
 ### Custom Algorithm
 
-When serving JWKS files, you can configure RS256, RS384, RS512 as supported algorithms:
+When serving JWKS files, you can configure RS256, RS384, and RS512 as supported algorithms. Here's how:
 
 ```bash
 # Use only RS256 by default
@@ -152,7 +154,7 @@ $ > jwkserve serve
 $ > jwkserve serve --algorithm RS256 --algorithm RS512
 ```
 
-The `/sign` endpoint for generating tokens supports signing algorithms as well. For flexible usage, signing is always possible using all three algorithms.
+The `/sign` endpoint for generating tokens supports signing algorithms as well. For flexible usage, signing is always possible using all three algorithms, regardless of what you've configured for the JWKS endpoint.
 
 ```bash
 $ > curl -X POST http://localhost:3000/sign/RS384 \
@@ -165,12 +167,14 @@ $ > curl -X POST http://localhost:3000/sign/RS384 \
         "sub": "user-12345"
     }'
 
-{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUz …"}
+{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzM4NCJ9.eyJhdWQiOiJteS1hcHAiLCJleHAiOjE3MzU2ODk2MDAsImlhdCI6MTcwNDA2NzIwMCwibmJmIjoxNzA0MDY3MjAwLCJzdWIiOiJ1c2VyLTEyMzQ1In0.signature_here"}
 ```
+
+That's it! 🎉 You can now generate tokens with any of the supported algorithms.
 
 ## Build
 
-You can build arm and x86 binaries:
+If you're building from source, you can create binaries for both ARM and x86 architectures:
 
 ```bash
 # Build ARM
@@ -180,7 +184,7 @@ $ > cargo zigbuild --release --target aarch64-unknown-linux-gnu
 $ > cargo zigbuild --release --target x86_64-unknown-linux-gnu
 ```
 
-Build a Docker container:
+To build a Docker container:
 
 ```bash
 # Docker build for ARM
@@ -192,7 +196,7 @@ $ > docker build \
 
 ## Container
 
-Run the container:
+Running the container is straightforward:
 
 ```bash
 $ > docker run -it \
@@ -202,7 +206,7 @@ $ > docker run -it \
 
 ### Docker Compose
 
-Use `jwkserve` with Docker Compose:
+I've found Docker Compose makes it even easier to use `jwkserve` in your development environment:
 
 ```yaml
 services:
