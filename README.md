@@ -8,7 +8,7 @@
 
 > A fake authentication service to speed up local development for JWT consumers.
 
-I've been building applications with JWT authentication based on JWKS, and I've found it's annoying to run real integration tests, especially locally or in pipelines, because it involves using an existing identity provider. That's why I built `jwkserve` — it lets you easily generate JWT access tokens (for any combination of claims) and serves the JWKS endpoints you need for easy integration.
+Running integration tests with JWT authentication based on JWKS often requires a real identity provider, which adds complexity when testing locally or in pipelines. `jwkserve` addresses this by generating JWT access tokens for any combination of claims and serving the JWKS endpoints needed for integration.
 
 Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve).
 
@@ -25,7 +25,7 @@ When validating a JWT access token using JWKS per [RFC 7519](https://datatracker
 * Fetch the provided JWKS Endpoint (usually at `/.well-known/jwks.json`)
 * Parse JSON structure and retrieve key with `kid` from JWT `Header`
 
-In my experience, when writing automated tests for authentication and authorization flows, requiring a real identity provider adds unnecessary complexity. That's where `jwkserve` comes in—it serves the needed endpoints and allows easy generation of generic claims and token structures.
+When writing automated tests for authentication and authorisation flows, requiring a real identity provider adds unnecessary complexity. `jwkserve` serves the needed endpoints and enables straightforward generation of generic claims and token structures.
 
 ## Installation
 
@@ -39,7 +39,7 @@ $ > docker pull sbstjn/jwkserve:latest
 
 ## Usage
 
-Think of `jwkserve` as a token vending machine that signs any payload as a valid JWT access token. I've found it speeds up writing integration tests, especially in complex scenarios with different custom claims.
+Think of `jwkserve` as a token vending machine that signs any payload as a valid JWT access token. It speeds up writing integration tests, especially in complex scenarios with different custom claims.
 
 Depending on how you've installed it, you can use the binary:
 
@@ -85,7 +85,7 @@ $ > curl -X POST http://localhost:3000/sign \
 {"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJteS1hcHAiLCJleHAiOjE3MzU2ODk2MDAsImlhdCI6MTcwNDA2NzIwMCwibmJmIjoxNzA0MDY3MjAwLCJzdWIiOiJ1c2VyLTEyMzQ1In0.signature_here"}
 ```
 
-That's it! You've got a valid JWT token. The token is complete and ready to use—I've just truncated the signature portion here for readability.
+That's it! You've got a valid JWT token. The token is complete and ready to use—the signature portion is truncated here for readability.
 
 ### JWKS Flow
 
@@ -126,7 +126,7 @@ $ > curl http://localhost:3000/.well-known/jwks.json
 
 ### Custom RSA Key
 
-By default, `serve` generates a new temporary RSA-2048 key on startup, which takes about 2 seconds. That's fine for occasional use, but if you're restarting frequently during development, you'll want instant startup. For that, use a persisted key:
+By default, `serve` generates a new temporary RSA-2048 key on startup, which takes about 2 seconds. That's fine for occasional use, but if you're restarting frequently during development, instant startup helps. For that, use a persisted key:
 
 ```bash
 # Generate key once, also available as key size 3072 and 4096
@@ -136,7 +136,7 @@ $ > jwkserve keygen --size 2048 --output key.pem
 $ > jwkserve serve --key key.pem
 ```
 
-For development, I've included some fixtures in the test folder that you can use:
+For development, the test folder includes fixtures that you can use:
 
 ```bash
 $ > jwkserve serve --key tests/fixtures/example_2048.pem
@@ -206,7 +206,7 @@ $ > docker run -it \
 
 ### Docker Compose
 
-I've found Docker Compose makes it even easier to use `jwkserve` in your development environment:
+Docker Compose makes it straightforward to use `jwkserve` in your development environment:
 
 ```yaml
 services:
