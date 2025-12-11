@@ -4,4 +4,18 @@ cobertura.xml
 .DS_Store
 .writing.md
 
-infrastructure
+# Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Terraform variables with sensitive data
+infrastructure/contact.auto.tfvars
+
+# Terraform directory
+infrastructure/.terraform/
+infrastructure/.terraform.lock.hcl
+
+# Private keys
+infrastructure/*.key
+infrastructure/*.pem
+infrastructure/.env

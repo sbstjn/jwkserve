@@ -1,0 +1,7 @@
+owner_contact = {
+  email                       = "email@example.com"
+  phone_number                = "+1.5555555555"
+  address_line_1              = "123 Main Street"
+  city                        = "City"
+  zip                         = "12345"
+}
