@@ -12,7 +12,7 @@ Running integration tests with JWT authentication based on JWKS often requires a
 
 Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve) and [jwkserve.com](https://jwkserve.com).
 
-![jwkserve.com](/screenshot.png)
+[![jwkserve.com](/screenshot.png)](https://jwkserve.com)
 
 ## Common JWKS Flow
 
