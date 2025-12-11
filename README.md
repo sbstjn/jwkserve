@@ -10,7 +10,9 @@
 
 Running integration tests with JWT authentication based on JWKS often requires a real identity provider, which adds complexity when testing locally or in pipelines. `jwkserve` addresses this by generating JWT access tokens for any combination of claims and serving the JWKS endpoints needed for integration.
 
-Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve).
+Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve) and [jwkserve.com](https://jwkserve.com).
+
+![jwkserve.com](/screenshot.png)
 
 ## Common JWKS Flow
 
