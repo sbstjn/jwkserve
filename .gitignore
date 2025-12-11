@@ -2,4 +2,6 @@ target
 .cursor
 cobertura.xml
 .DS_Store
+.writing.md
 
+infrastructure

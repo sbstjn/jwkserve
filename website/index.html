@@ -380,13 +380,13 @@
     <footer>
         <div class="container">
             <div class="footer-content">
-                <p>All token generation happens server-side. Your claims are sent to <code>https://jwkserve.com</code> for signing.</p>
+                <p>All token generation happens server-side. Your claims are sent to <code>{{ISSUER}}</code> for signing.</p>
             </div>
         </div>
     </footer>
 
     <script>
-        const API_BASE = 'https://jwkserve.com';
+        const API_BASE = '{{ISSUER}}';
         let debounceTimer = null;
         let currentRequest = null;
 
@@ -568,7 +568,7 @@
             const initialClaims = {
                 "sub": "1234567890",
                 "name": "John Doe",
-                "iss": "https://jwkserve.com",
+                "iss": "{{ISSUER}}",
                 "iat": now,
                 "nbf": now,
                 "exp": exp

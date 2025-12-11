@@ -1,7 +1,7 @@
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::{Request, StatusCode},
-    response::{IntoResponse, Json, Response},
+    response::{Html, IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
@@ -85,9 +85,11 @@ pub fn build_router(state: ServerState) -> Router {
         .with_state(state)
 }
 
-/// Root endpoint returning service status
-async fn root() -> &'static str {
-    "JWKServe - JWT authentication testing helper"
+/// Root endpoint serving the web UI
+async fn root(State(state): State<ServerState>) -> Html<String> {
+    const TEMPLATE: &str = include_str!("../website/index.html");
+    let html = TEMPLATE.replace("{{ISSUER}}", &state.issuer);
+    Html(html)
 }
 
 /// OpenID Connect discovery endpoint
