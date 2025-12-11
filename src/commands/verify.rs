@@ -4,7 +4,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use clap::Args;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde_json::Value;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 #[derive(Args)]
 pub struct ArgsVerify {
@@ -69,7 +69,7 @@ fn validate_jwks_uri(issuer: &str, jwks_uri: &str) -> color_eyre::Result<()> {
 }
 
 pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
-    info!("Verifying JWT token");
+    debug!("Verifying JWT token");
 
     // Create HTTP client with timeout
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -79,9 +79,9 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
 
     // Decode header to get algorithm and kid
     let header = decode_header(&args.token)?;
-    info!("Token algorithm: {:?}", header.alg);
+    debug!("Token algorithm: {:?}", header.alg);
     if let Some(kid) = &header.kid {
-        info!("Token key ID (kid): {}", kid);
+        debug!("Token key ID (kid): {}", kid);
     }
 
     // Decode without verification first to get claims (especially 'iss')
@@ -98,7 +98,7 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
         }
     };
 
-    info!(
+    debug!(
         "Token claims: {}",
         serde_json::to_string_pretty(&unverified)?
     );
@@ -109,14 +109,14 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| color_eyre::eyre::eyre!("Token missing 'iss' claim"))?;
 
-    info!("Token issuer: {}", issuer);
+    debug!("Token issuer: {}", issuer);
 
     // Fetch OpenID configuration to discover JWKS URI
     let openid_config_url = format!(
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
     );
-    info!("Fetching OpenID configuration from: {}", openid_config_url);
+    debug!("Fetching OpenID configuration from: {}", openid_config_url);
 
     let openid_config: Value = client.get(&openid_config_url).send().await?.json().await?;
 
@@ -133,7 +133,7 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
     // Validate JWKS URI is from the same domain
     validate_jwks_uri(issuer, jwks_uri)?;
 
-    info!("Fetching JWKS from: {}", jwks_uri);
+    debug!("Fetching JWKS from: {}", jwks_uri);
 
     let jwks: Value = client.get(jwks_uri).send().await?.json().await?;
 
@@ -142,7 +142,7 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
         .and_then(|k| k.as_array())
         .ok_or_else(|| color_eyre::eyre::eyre!("Invalid JWKS format"))?;
 
-    info!("Found {} keys in JWKS", keys.len());
+    debug!("Found {} keys in JWKS", keys.len());
 
     // Try to find matching key
     let matching_key = if let Some(kid) = &header.kid {
@@ -172,7 +172,7 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
     let key =
         matching_key.ok_or_else(|| color_eyre::eyre::eyre!("No matching key found in JWKS"))?;
 
-    info!("Using key: {}", serde_json::to_string_pretty(key)?);
+    debug!("Using key: {}", serde_json::to_string_pretty(key)?);
 
     // Extract n and e from JWK
     let n = key
@@ -208,7 +208,7 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
     }
 
     if !args.audience.is_empty() {
-        info!("Validating audience: {:?}", args.audience);
+        debug!("Validating audience: {:?}", args.audience);
         validation.set_audience(&args.audience);
     } else {
         validation.validate_aud = false;
@@ -217,8 +217,8 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
     // Verify the token
     let verified = decode::<Value>(&args.token, &decoding_key, &validation)?;
 
-    println!("✓ Token verified successfully!");
-    println!("\nClaims:");
+    debug!("Token verified successfully!");
+
     println!("{}", serde_json::to_string_pretty(&verified.claims)?);
 
     Ok(())
