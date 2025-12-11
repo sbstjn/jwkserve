@@ -378,6 +378,24 @@
                     </div>
                     <div class="output empty" id="output">Token will appear here...</div>
                 </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="panel-title secondary">OpenID & JWKS Endpoints</span>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div>
+                                <div style="font-size: 0.875rem; color: #a8a8b8; margin-bottom: 0.5rem; font-weight: 600;">OpenID Configuration</div>
+                                <a href="/.well-known/openid-configuration" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/openid-configuration</a>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.875rem; color: #a8a8b8; margin-bottom: 0.5rem; font-weight: 600;">JSON Web Key Set (JWKS)</div>
+                                <a href="/.well-known/jwks.json" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/jwks.json</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
