@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: #0f0f1a;
+            color: #e8e8f0;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: rgba(15, 15, 26, 0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 2rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .header-left {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #c5a3ff 0%, #a8d5ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #a8a8b8;
+            font-size: 0.9375rem;
+            font-weight: 400;
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem 0;
+        }
+
+
+        .algorithm-select {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .algorithm-select label {
+            font-size: 0.875rem;
+            color: #c5a3ff;
+            font-weight: 600;
+        }
+
+        .algorithm-select select {
+            padding: 0.625rem 1rem;
+            border: 1.5px solid rgba(197, 163, 255, 0.3);
+            border-radius: 0.5rem;
+            background: rgba(197, 163, 255, 0.1);
+            font-size: 0.875rem;
+            color: #e8e8f0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .algorithm-select select:hover {
+            border-color: rgba(197, 163, 255, 0.5);
+            background: rgba(197, 163, 255, 0.15);
+        }
+
+        .algorithm-select select:focus {
+            outline: none;
+            border-color: #c5a3ff;
+            box-shadow: 0 0 0 3px rgba(197, 163, 255, 0.2);
+        }
+
+        .status {
+            font-size: 0.875rem;
+            color: #a8a8b8;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 0.5rem;
+            font-weight: 500;
+        }
+
+        .status.error {
+            color: #ffb3ba;
+            background: rgba(255, 179, 186, 0.15);
+        }
+
+        .status.success {
+            color: #baffc9;
+            background: rgba(186, 255, 201, 0.15);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(197, 163, 255, 0.3);
+            border-top-color: #c5a3ff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .main-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .panel {
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .panel.prominent {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(197, 163, 255, 0.2);
+        }
+
+        .panel:hover {
+            border-color: rgba(197, 163, 255, 0.3);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .panel-title {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #c5a3ff;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .panel-title.secondary {
+            color: #a8a8b8;
+            font-size: 0.75rem;
+        }
+
+        .copy-btn {
+            background: rgba(197, 163, 255, 0.15);
+            border: 1.5px solid rgba(197, 163, 255, 0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+            color: #c5a3ff;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+
+        .copy-btn:hover {
+            background: rgba(197, 163, 255, 0.25);
+            border-color: rgba(197, 163, 255, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .copy-btn:active {
+            transform: translateY(0);
+        }
+
+        .copy-btn.copied {
+            background: #baffc9;
+            border-color: #baffc9;
+            color: #0f0f1a;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 250px;
+            padding: 1.5rem;
+            border: none;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            font-size: 0.9375rem;
+            line-height: 1.7;
+            resize: vertical;
+            background: rgba(255, 255, 255, 0.02);
+            color: #e8e8f0;
+            transition: all 0.2s;
+        }
+
+        textarea:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        textarea.error {
+            background: rgba(255, 179, 186, 0.1);
+            border-left: 3px solid #ffb3ba;
+        }
+
+        .output {
+            width: 100%;
+            min-height: 200px;
+            padding: 1.5rem;
+            border: none;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            font-size: 0.9375rem;
+            line-height: 1.7;
+            background: rgba(255, 255, 255, 0.02);
+            color: #e8e8f0;
+            word-break: break-all;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+        }
+
+        .output.empty {
+            color: #6b6b7a;
+        }
+
+        .jwt-header {
+            color: #a8d5ff;
+            font-weight: 500;
+        }
+
+        .jwt-payload {
+            color: #baffc9;
+            font-weight: 500;
+        }
+
+        .jwt-signature {
+            color: #ffb3ba;
+            font-weight: 500;
+        }
+
+        .jwt-separator {
+            color: #a8a8b8;
+        }
+
+
+        footer {
+            background: rgba(15, 15, 26, 0.9);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 2.5rem 0;
+            margin-top: 4rem;
+        }
+
+        .footer-content {
+            text-align: center;
+            color: #6b6b7a;
+            font-size: 0.875rem;
+        }
+
+        .footer-content code {
+            background: rgba(197, 163, 255, 0.15);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.8125rem;
+            color: #c5a3ff;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1.5rem;
+            }
+            textarea, .output {
+                font-size: 0.875rem;
+            }
+            .header-content {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header-right {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>JWT Generator</h1>
+                    <p class="subtitle">Create and sign JSON Web Tokens</p>
+                </div>
+                <div class="header-right">
+                    <div class="algorithm-select">
+                        <label for="algorithm">Algorithm:</label>
+                        <select id="algorithm">
+                            <option value="RS256">RS256</option>
+                            <option value="RS384">RS384</option>
+                            <option value="RS512">RS512</option>
+                        </select>
+                    </div>
+                    <div class="status" id="status">
+                        <span id="status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="main-panels">
+                <div class="panel prominent">
+                    <div class="panel-header">
+                        <span class="panel-title">Claims (JSON)</span>
+                    </div>
+                    <textarea id="claims" placeholder='{\n  "sub": "1234567890",\n  "name": "John Doe"\n}'></textarea>
+                </div>
+
+                <div class="panel prominent">
+                    <div class="panel-header">
+                        <span class="panel-title">JWT Token</span>
+                        <button class="copy-btn" id="copy-btn" onclick="copyToken()">Copy</button>
+                    </div>
+                    <div class="output empty" id="output">Token will appear here...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <p>All token generation happens server-side. Your claims are sent to <code>https://jwkserve.com</code> for signing.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = 'https://jwkserve.com';
+        let debounceTimer = null;
+        let currentRequest = null;
+
+        const claimsTextarea = document.getElementById('claims');
+        const algorithmSelect = document.getElementById('algorithm');
+        const outputDiv = document.getElementById('output');
+        const decodedOutputDiv = document.getElementById('decoded-output');
+        const statusDiv = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
+
+        function setStatus(text, type = '') {
+            statusText.textContent = text;
+            statusDiv.className = 'status ' + type;
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                statusDiv.innerHTML = '<span id="status-text">Generating...</span><div class="spinner"></div>';
+            } else {
+                statusDiv.innerHTML = '<span id="status-text">Ready</span>';
+                statusText = document.getElementById('status-text');
+            }
+        }
+
+        function colorizeToken(token) {
+            const parts = token.split('.');
+            if (parts.length !== 3) {
+                return token;
+            }
+
+            const header = parts[0];
+            const payload = parts[1];
+            const signature = parts[2];
+
+            return `<span class="jwt-header">${header}</span><span class="jwt-separator">.</span><span class="jwt-payload">${payload}</span><span class="jwt-separator">.</span><span class="jwt-signature">${signature}</span>`;
+        }
+
+        function decodePayload(token) {
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    return null;
+                }
+
+                const payload = parts[1];
+                // Add padding if needed for base64 decoding
+                const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
+                const decoded = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+                const parsed = JSON.parse(decoded);
+                return JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function updateOutput(token, error = false) {
+            if (error) {
+                outputDiv.textContent = token;
+                outputDiv.className = 'output';
+                setStatus('Error generating token', 'error');
+            } else if (token) {
+                outputDiv.innerHTML = colorizeToken(token);
+                outputDiv.className = 'output';
+                outputDiv.dataset.token = token;
+                
+                setStatus('Token generated', 'success');
+            } else {
+                outputDiv.textContent = 'Token will appear here...';
+                outputDiv.className = 'output empty';
+                delete outputDiv.dataset.token;
+                decodedOutputDiv.textContent = 'Decoded payload will appear here...';
+                decodedOutputDiv.className = 'output empty';
+                setStatus('Ready');
+            }
+        }
+
+        async function generateToken() {
+            const claimsText = claimsTextarea.value.trim();
+            
+            if (!claimsText) {
+                updateOutput(null);
+                return;
+            }
+
+            let claims;
+            try {
+                claims = JSON.parse(claimsText);
+            } catch (e) {
+                updateOutput('Invalid JSON: ' + e.message, true);
+                claimsTextarea.classList.add('error');
+                return;
+            }
+
+            claimsTextarea.classList.remove('error');
+
+            if (currentRequest) {
+                currentRequest.abort();
+            }
+
+            const algorithm = algorithmSelect.value;
+            const endpoint = algorithm === 'RS256' 
+                ? `${API_BASE}/sign`
+                : `${API_BASE}/sign/${algorithm}`;
+
+            setLoading(true);
+
+            const controller = new AbortController();
+            currentRequest = controller;
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(claims),
+                    signal: controller.signal
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    updateOutput('Error: ' + (data.error || response.statusText), true);
+                    return;
+                }
+
+                updateOutput(data.token);
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    return;
+                }
+                updateOutput('Network error: ' + error.message, true);
+            } finally {
+                currentRequest = null;
+                setLoading(false);
+            }
+        }
+
+        function debounceGenerate() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(generateToken, 300);
+        }
+
+        claimsTextarea.addEventListener('input', () => {
+            debounceGenerate();
+        });
+
+        algorithmSelect.addEventListener('change', () => {
+            if (claimsTextarea.value.trim()) {
+                generateToken();
+            }
+        });
+
+        function copyToken() {
+            const token = outputDiv.dataset.token || outputDiv.textContent.trim();
+            if (!token || token === 'Token will appear here...') {
+                return;
+            }
+
+            navigator.clipboard.writeText(token).then(() => {
+                const btn = document.getElementById('copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+
+        function initializeClaims() {
+            const now = Math.floor(Date.now() / 1000);
+            const exp = now + (30 * 60); // 30 minutes from now
+            
+            const initialClaims = {
+                "sub": "1234567890",
+                "name": "John Doe",
+                "iss": "https://jwkserve.com",
+                "iat": now,
+                "nbf": now,
+                "exp": exp
+            };
+            
+            claimsTextarea.value = JSON.stringify(initialClaims, null, 2);
+        }
+
+        initializeClaims();
+        generateToken();
+    </script>
+</body>
+</html>
