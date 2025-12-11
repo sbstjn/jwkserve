@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JWT Generator</title>
+    <title>JWT Generator - jwkserve.com</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔑</text></svg>">
+    <meta name="description" content="A simple tool to generate JWT tokens for local development and testing purposes.">
+    <meta name="keywords" content="JWT, JSON Web Token, generator, testing, development">
+    <meta name="author" content="jwkserve.com">
+    <meta name="robots" content="index, follow">
     <style>
         * {
             margin: 0;
@@ -381,6 +386,7 @@
         <div class="container">
             <div class="footer-content">
                 <p>All token generation happens server-side. Your claims are sent to <code>{{ISSUER}}</code> for signing.</p>
+                <p style="margin-top: 0.5rem; opacity: 0.5;">v{{VERSION}}</p>
             </div>
         </div>
     </footer>

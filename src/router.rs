@@ -88,7 +88,11 @@ pub fn build_router(state: ServerState) -> Router {
 /// Root endpoint serving the web UI
 async fn root(State(state): State<ServerState>) -> Html<String> {
     const TEMPLATE: &str = include_str!("../website/index.html");
-    let html = TEMPLATE.replace("{{ISSUER}}", &state.issuer);
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    let html = TEMPLATE
+        .replace("{{ISSUER}}", &state.issuer)
+        .replace("{{VERSION}}", VERSION);
     Html(html)
 }
 
