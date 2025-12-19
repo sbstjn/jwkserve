@@ -35,6 +35,9 @@ When writing automated tests for authentication and authorisation flows, requiri
 # Install jwkserve binary
 $ > cargo install jwkserve
 
+# Install jwkserve binary without HTML UI
+$ > cargo install jwkserve --features headless
+
 # OR: Download jwkserve container
 $ > docker pull sbstjn/jwkserve:latest
 ```
