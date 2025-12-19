@@ -24,6 +24,34 @@ locals {
 
 provider "scaleway" {}
 
+# IAM Application for GitHub Actions automation
+resource "scaleway_iam_application" "github_actions" {
+  name        = "github-actions-jwkserve"
+  description = "IAM application for GitHub Actions container automation"
+}
+
+# IAM Policy granting container registry and deployment permissions
+resource "scaleway_iam_policy" "github_actions" {
+  name           = "github-actions-container-policy"
+  description    = "Policy for GitHub Actions to push containers and deploy"
+  application_id = scaleway_iam_application.github_actions.id
+
+  rule {
+    project_ids = [local.project_id]
+    permission_set_names = [
+      "ContainerRegistryFullAccess",
+      "ContainersFullAccess"
+    ]
+  }
+}
+
+# API Key for GitHub Actions
+resource "scaleway_iam_api_key" "github_actions" {
+  application_id     = scaleway_iam_application.github_actions.id
+  description        = "API key for GitHub Actions automation"
+  default_project_id = local.project_id
+}
+
 resource "scaleway_domain_registration" "test" {
   domain_names      = ["jwkserve.com"]
   duration_in_years = 1
@@ -92,4 +120,15 @@ output "container_hostname" {
 output "container_registry" {
   value       = scaleway_container_namespace.registry.registry_endpoint
   description = "Container Registry Endpoint"
+}
+
+output "github_actions_api_access_key" {
+  value       = scaleway_iam_api_key.github_actions.access_key
+  description = "GitHub Actions API Access Key (use with SCW_ACCESS_KEY)"
+}
+
+output "github_actions_api_secret_key" {
+  value       = scaleway_iam_api_key.github_actions.secret_key
+  description = "GitHub Actions API Secret Key (use with SCW_SECRET_KEY)"
+  sensitive   = true
 }
