@@ -108,21 +108,10 @@ async fn root(State(state): State<ServerState>) -> Html<String> {
 /// OpenID Connect Discovery 1.0 specification
 async fn openid_discovery(State(state): State<ServerState>) -> Json<Value> {
     let jwks_uri = format!("{}/.well-known/jwks.json", state.issuer);
-    let authorization_endpoint = format!("{}/authorize", state.issuer);
-    let token_endpoint = format!("{}/token", state.issuer);
-
-    let supported_algs: Vec<&str> = state.algorithms.iter().map(|alg| alg.as_str()).collect();
 
     Json(json!({
         "issuer": state.issuer,
-        "authorization_endpoint": authorization_endpoint,
-        "token_endpoint": token_endpoint,
         "jwks_uri": jwks_uri,
-        "response_types_supported": ["id_token", "token", "code"],
-        "subject_types_supported": ["public"],
-        "id_token_signing_alg_values_supported": supported_algs,
-        "scopes_supported": ["openid", "profile", "email"],
-        "claims_supported": ["sub", "iss", "aud", "exp", "iat", "name", "email"]
     }))
 }
 
