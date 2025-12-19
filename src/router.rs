@@ -63,7 +63,6 @@ pub fn build_router(state: ServerState) -> Router {
                         "http_request",
                         method = %request.method(),
                         uri = %request.uri(),
-                        version = ?request.version(),
                     )
                 })
                 .on_response(
@@ -73,6 +72,13 @@ pub fn build_router(state: ServerState) -> Router {
                             latency_ms = latency.as_millis(),
                             "request completed"
                         );
+                    },
+                )
+                .on_failure(
+                    |_error: tower_http::classify::ServerErrorsFailureClass,
+                     _latency: Duration,
+                     _span: &Span| {
+                        tracing::error!("request failed");
                     },
                 ),
         )

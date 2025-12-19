@@ -205,6 +205,42 @@
             font-size: 0.75rem;
         }
 
+        .refresh-control {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .refresh-control label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8125rem;
+            color: #a8a8b8;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .refresh-control input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #c5a3ff;
+        }
+
+        .countdown {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            font-size: 0.8125rem;
+            color: #c5a3ff;
+            font-weight: 600;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        .countdown.disabled {
+            color: #6b6b7a;
+        }
+
         .copy-btn {
             background: rgba(197, 163, 255, 0.15);
             border: 1.5px solid rgba(197, 163, 255, 0.3);
@@ -235,7 +271,7 @@
 
         textarea {
             width: 100%;
-            min-height: 250px;
+            min-height: 225px;
             padding: 1.5rem;
             border: none;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
@@ -367,6 +403,13 @@
                 <div class="panel prominent">
                     <div class="panel-header">
                         <span class="panel-title">Claims (JSON)</span>
+                        <div class="refresh-control">
+                            <label>
+                                <input type="checkbox" id="refresh-timestamps" checked>
+                                <span>Refresh Timestamps</span>
+                            </label>
+                            <span class="countdown" id="countdown">59sec</span>
+                        </div>
                     </div>
                     <textarea id="claims" placeholder='{\n  "sub": "1234567890",\n  "name": "John Doe"\n}'></textarea>
                 </div>
@@ -599,15 +642,78 @@
                 "name": "John Doe",
                 "iss": "{{ISSUER}}",
                 "iat": now,
-                "nbf": now,
                 "exp": exp
             };
             
             claimsTextarea.value = JSON.stringify(initialClaims, null, 2);
         }
 
+        function refreshTimestamps() {
+            try {
+                const claims = JSON.parse(claimsTextarea.value);
+                const now = Math.floor(Date.now() / 1000);
+                
+                if ('iat' in claims) {
+                    claims.iat = now;
+                }
+                if ('exp' in claims) {
+                    claims.exp = now + (30 * 60); // 30 minutes from now
+                }
+                
+                claimsTextarea.value = JSON.stringify(claims, null, 2);
+                generateToken();
+            } catch (e) {
+                // If JSON is invalid, don't refresh
+            }
+        }
+
+        let countdownSeconds = 60;
+        let countdownInterval = null;
+        const refreshCheckbox = document.getElementById('refresh-timestamps');
+        const countdownDisplay = document.getElementById('countdown');
+
+        function updateCountdown() {
+            countdownSeconds--;
+            
+            if (countdownSeconds <= 0) {
+                countdownSeconds = 60;
+                if (refreshCheckbox.checked) {
+                    refreshTimestamps();
+                }
+            }
+            
+            countdownDisplay.textContent = `${countdownSeconds}sec`;
+        }
+
+        function startCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            countdownSeconds = 60;
+            countdownDisplay.textContent = `${countdownSeconds}sec`;
+            countdownDisplay.classList.remove('disabled');
+            countdownInterval = setInterval(updateCountdown, 1000);
+        }
+
+        function stopCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            countdownDisplay.classList.add('disabled');
+        }
+
+        refreshCheckbox.addEventListener('change', () => {
+            if (refreshCheckbox.checked) {
+                startCountdown();
+            } else {
+                stopCountdown();
+            }
+        });
+
         initializeClaims();
         generateToken();
+        startCountdown();
     </script>
 </body>
 </html>

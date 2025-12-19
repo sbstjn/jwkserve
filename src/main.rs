@@ -40,13 +40,14 @@ async fn main() -> color_eyre::Result<()> {
     // Initialize color-eyre for better error reporting
     color_eyre::install()?;
 
-    // Initialize tracing subscriber with env filter and improved formatting
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .with_target(false)
+        .with_max_level(tracing::Level::INFO)
+        .with_writer(std::io::stdout)
         .compact()
         .init();
 

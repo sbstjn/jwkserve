@@ -17,6 +17,6 @@ RUN --mount=type=bind,source=./target/aarch64-unknown-linux-gnu/release,target=/
 # Default version
 FROM base AS default
 
-ENV RUST_LOG=debug
+ENV RUST_LOG=info
 
 CMD ["jwkserve", "serve", "--port", "3000", "--bind", "0.0.0.0"]
