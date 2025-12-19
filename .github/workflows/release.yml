@@ -237,6 +237,11 @@ jobs:
           password: ${{ secrets.SCALEWAY_API_KEY }}
           registry: ${{ secrets.CONTAINER_REGISTRY_ENDPOINT }}
 
+      - name: Create private key file
+        run: |
+          cd infrastructure
+          echo "${{ secrets.JWKSERVE_KEY }}" > private.key
+
       - name: Build Scaleway Container
         run: |
           cd infrastructure
