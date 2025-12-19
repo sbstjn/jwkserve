@@ -511,6 +511,22 @@
                         <button class="copy-btn" id="copy-btn" onclick="copyToken()">Copy</button>
                     </div>
                     <div class="output empty" id="output">Token will appear here...</div>
+                    <div class="panel-footer">
+                        <div class="timestamp-group">
+                            <div class="timestamp-info">
+                                <div class="timestamp-label">Algorithm</div>
+                                <div class="timestamp-value empty" id="header-alg-display">—</div>
+                            </div>
+                            <div class="timestamp-info">
+                                <div class="timestamp-label">Type</div>
+                                <div class="timestamp-value empty" id="header-typ-display">—</div>
+                            </div>
+                            <div class="timestamp-info">
+                                <div class="timestamp-label">Key ID</div>
+                                <div class="timestamp-value empty" id="header-kid-display">—</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="panel">
@@ -561,6 +577,9 @@
         const iatDisplay = document.getElementById('iat-display');
         const expDisplay = document.getElementById('exp-display');
         const persistCheckbox = document.getElementById('persist-claims');
+        const headerAlgDisplay = document.getElementById('header-alg-display');
+        const headerTypDisplay = document.getElementById('header-typ-display');
+        const headerKidDisplay = document.getElementById('header-kid-display');
 
         const STORAGE_KEY = 'jwkserve-claims';
         const STORAGE_PERSIST_KEY = 'jwkserve-persist-enabled';
@@ -646,6 +665,69 @@
                 }
             } catch (e) {
                 // Invalid JSON, keep current display
+            }
+        }
+
+        function decodeJWTHeader(token) {
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    return null;
+                }
+
+                const header = parts[0];
+                const padded = header + '='.repeat((4 - header.length % 4) % 4);
+                const decoded = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+                return JSON.parse(decoded);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function updateHeaderDisplay(token) {
+            if (!token || token === 'Token will appear here...') {
+                headerAlgDisplay.textContent = '—';
+                headerAlgDisplay.className = 'timestamp-value empty';
+                headerTypDisplay.textContent = '—';
+                headerTypDisplay.className = 'timestamp-value empty';
+                headerKidDisplay.textContent = '—';
+                headerKidDisplay.className = 'timestamp-value empty';
+                return;
+            }
+
+            const header = decodeJWTHeader(token);
+            if (!header) {
+                headerAlgDisplay.textContent = '—';
+                headerAlgDisplay.className = 'timestamp-value empty';
+                headerTypDisplay.textContent = '—';
+                headerTypDisplay.className = 'timestamp-value empty';
+                headerKidDisplay.textContent = '—';
+                headerKidDisplay.className = 'timestamp-value empty';
+                return;
+            }
+
+            if (header.alg) {
+                headerAlgDisplay.textContent = header.alg;
+                headerAlgDisplay.className = 'timestamp-value';
+            } else {
+                headerAlgDisplay.textContent = '—';
+                headerAlgDisplay.className = 'timestamp-value empty';
+            }
+
+            if (header.typ) {
+                headerTypDisplay.textContent = header.typ;
+                headerTypDisplay.className = 'timestamp-value';
+            } else {
+                headerTypDisplay.textContent = '—';
+                headerTypDisplay.className = 'timestamp-value empty';
+            }
+
+            if (header.kid) {
+                headerKidDisplay.textContent = header.kid;
+                headerKidDisplay.className = 'timestamp-value';
+            } else {
+                headerKidDisplay.textContent = '—';
+                headerKidDisplay.className = 'timestamp-value empty';
             }
         }
 
@@ -740,12 +822,13 @@
             if (error) {
                 outputDiv.textContent = token;
                 outputDiv.className = 'output';
+                updateHeaderDisplay(null);
                 setStatus('Error generating token', 'error');
             } else if (token) {
                 outputDiv.innerHTML = colorizeToken(token);
                 outputDiv.className = 'output';
                 outputDiv.dataset.token = token;
-                
+                updateHeaderDisplay(token);
                 setStatus('Token generated', 'success');
             } else {
                 outputDiv.textContent = 'Token will appear here...';
@@ -753,6 +836,7 @@
                 delete outputDiv.dataset.token;
                 decodedOutputDiv.textContent = 'Decoded payload will appear here...';
                 decodedOutputDiv.className = 'output empty';
+                updateHeaderDisplay(null);
                 setStatus('Ready');
             }
         }
