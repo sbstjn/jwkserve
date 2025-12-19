@@ -229,3 +229,33 @@ jobs:
           tags: sbstjn/jwkserve:${{ github.ref_name }},sbstjn/jwkserve:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Login to Scaleway Container Registry
+        uses: docker/login-action@v3
+        with:
+          username: nologin
+          password: ${{ secrets.SCALEWAY_API_KEY }}
+          registry: ${{ secrets.CONTAINER_REGISTRY_ENDPOINT }}
+
+      - name: Build Scaleway Container
+        run: |
+          cd infrastructure
+          docker build \
+            --platform linux/amd64 \
+            -f Dockerfile . \
+            -t rg.fr-par.scw.cloud/funcscwjwkservey7lpl8qx/jwkserve:latest
+
+      - name: Push to Scaleway Container Registry
+        run: docker push rg.fr-par.scw.cloud/funcscwjwkservey7lpl8qx/jwkserve:latest
+
+      - name: Install Scaleway CLI
+        run: |
+          curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
+          sudo mv scw /usr/local/bin/
+
+      - name: Deploy Scaleway Container
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_REGION: fr-par
+        run: scw container container deploy 16513618-be5b-4ecc-a663-474685c62d7e
