@@ -254,9 +254,7 @@ jobs:
         run: docker push rg.fr-par.scw.cloud/funcscwjwkservey7lpl8qx/jwkserve:latest
 
       - name: Install Scaleway CLI
-        run: |
-          curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
-          sudo mv scw /usr/local/bin/
+        run: curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
 
       - name: Deploy Scaleway Container
         env:
