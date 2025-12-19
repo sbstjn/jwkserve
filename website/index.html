@@ -241,6 +241,40 @@
             color: #6b6b7a;
         }
 
+        .panel-footer {
+            padding: 1rem 1.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            font-size: 0.8125rem;
+        }
+
+        .timestamp-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .timestamp-label {
+            color: #a8a8b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.6875rem;
+        }
+
+        .timestamp-value {
+            color: #c5a3ff;
+            font-weight: 500;
+        }
+
+        .timestamp-value.empty {
+            color: #6b6b7a;
+            font-style: italic;
+        }
+
         .copy-btn {
             background: rgba(197, 163, 255, 0.15);
             border: 1.5px solid rgba(197, 163, 255, 0.3);
@@ -412,6 +446,16 @@
                         </div>
                     </div>
                     <textarea id="claims" placeholder='{\n  "sub": "1234567890",\n  "name": "John Doe"\n}'></textarea>
+                    <div class="panel-footer">
+                        <div class="timestamp-info">
+                            <div class="timestamp-label">Issued At (iat)</div>
+                            <div class="timestamp-value empty" id="iat-display">—</div>
+                        </div>
+                        <div class="timestamp-info">
+                            <div class="timestamp-label">Expires At (exp)</div>
+                            <div class="timestamp-value empty" id="exp-display">—</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="panel prominent">
@@ -468,10 +512,88 @@
         const decodedOutputDiv = document.getElementById('decoded-output');
         const statusDiv = document.getElementById('status');
         const statusText = document.getElementById('status-text');
+        const iatDisplay = document.getElementById('iat-display');
+        const expDisplay = document.getElementById('exp-display');
 
         function setStatus(text, type = '') {
             statusText.textContent = text;
             statusDiv.className = 'status ' + type;
+        }
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return null;
+            
+            try {
+                const date = new Date(timestamp * 1000);
+                const now = new Date();
+                const diffMs = date - now;
+                const diffMins = Math.round(diffMs / 60000);
+                
+                const dateStr = date.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                
+                if (Math.abs(diffMins) < 1) {
+                    return `${dateStr} (now)`;
+                } else if (diffMins > 0) {
+                    if (diffMins < 60) {
+                        return `${dateStr} (in ${diffMins}min)`;
+                    } else {
+                        const hours = Math.round(diffMins / 60);
+                        return `${dateStr} (in ${hours}h)`;
+                    }
+                } else {
+                    const absMins = Math.abs(diffMins);
+                    if (absMins < 60) {
+                        return `${dateStr} (${absMins}min ago)`;
+                    } else {
+                        const hours = Math.round(absMins / 60);
+                        return `${dateStr} (${hours}h ago)`;
+                    }
+                }
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function updateTimestampDisplay() {
+            try {
+                const claimsText = claimsTextarea.value.trim();
+                if (!claimsText) {
+                    iatDisplay.textContent = '—';
+                    iatDisplay.className = 'timestamp-value empty';
+                    expDisplay.textContent = '—';
+                    expDisplay.className = 'timestamp-value empty';
+                    return;
+                }
+
+                const claims = JSON.parse(claimsText);
+                
+                if (claims.iat) {
+                    const formatted = formatTimestamp(claims.iat);
+                    iatDisplay.textContent = formatted || '—';
+                    iatDisplay.className = formatted ? 'timestamp-value' : 'timestamp-value empty';
+                } else {
+                    iatDisplay.textContent = '—';
+                    iatDisplay.className = 'timestamp-value empty';
+                }
+                
+                if (claims.exp) {
+                    const formatted = formatTimestamp(claims.exp);
+                    expDisplay.textContent = formatted || '—';
+                    expDisplay.className = formatted ? 'timestamp-value' : 'timestamp-value empty';
+                } else {
+                    expDisplay.textContent = '—';
+                    expDisplay.className = 'timestamp-value empty';
+                }
+            } catch (e) {
+                // Invalid JSON, keep current display
+            }
         }
 
         function setLoading(loading) {
@@ -603,6 +725,7 @@
         }
 
         claimsTextarea.addEventListener('input', () => {
+            updateTimestampDisplay();
             debounceGenerate();
         });
 
@@ -661,6 +784,7 @@
                 }
                 
                 claimsTextarea.value = JSON.stringify(claims, null, 2);
+                updateTimestampDisplay();
                 generateToken();
             } catch (e) {
                 // If JSON is invalid, don't refresh
@@ -712,8 +836,12 @@
         });
 
         initializeClaims();
+        updateTimestampDisplay();
         generateToken();
         startCountdown();
+        
+        // Update timestamp display every 30 seconds to keep relative times current
+        setInterval(updateTimestampDisplay, 30000);
     </script>
 </body>
 </html>
