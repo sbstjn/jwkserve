@@ -107,6 +107,14 @@ resource "scaleway_domain_record" "dns" {
   ttl      = 60
 }
 
+resource "scaleway_domain_record" "google_verification" {
+  dns_zone   = "jwkserve.com"
+  project_id = local.project_id
+  type       = "TXT"
+  data       = "google-site-verification=A7r61QQP-WzZd8u6usanHvMjFSZEV-8wPxuiTLku3Ao"
+  ttl        = 3600
+}
+
 output "container_id" {
   description = "Container ID"
   value       = element(split("/", scaleway_container.container.id), 1)

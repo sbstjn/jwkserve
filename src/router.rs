@@ -27,23 +27,63 @@ use include_dir::{include_dir, Dir};
 static WEBSITE_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/website");
 
 /// Shared application state containing server configuration and cryptographic keys
+///
+/// All fields use Arc to minimize cloning overhead in Axum's State extractor,
+/// which clones the state for each request handler.
 #[derive(Clone)]
 pub struct ServerState {
     /// Base issuer URL for OpenID configuration
-    pub issuer: String,
+    pub issuer: Arc<str>,
     /// Supported JWT signing algorithms
-    pub algorithms: Vec<KeySignAlgorithm>,
+    pub algorithms: Arc<[KeySignAlgorithm]>,
     /// RSA private key for signing operations
     pub key: Arc<RsaPrivateKey>,
+    /// Cached OpenID discovery response
+    openid_config: Arc<Value>,
+    /// Cached JWKS response
+    jwks_response: Arc<Value>,
+    /// Cached rendered HTML template (non-headless only)
+    #[cfg(not(feature = "headless"))]
+    cached_html: Arc<str>,
 }
 
 impl ServerState {
     /// Create new server state with the provided configuration
     pub fn new(issuer: String, algorithms: Vec<KeySignAlgorithm>, key: RsaPrivateKey) -> Self {
+        let issuer: Arc<str> = Arc::from(issuer.as_str());
+        let jwks_uri = format!("{}/.well-known/jwks.json", issuer);
+
+        // Pre-compute JWKS response
+        let keys: Vec<Value> = algorithms.iter().map(|alg| key.to_jwk(alg)).collect();
+        let jwks_response = Arc::new(json!({
+            "keys": keys
+        }));
+
+        // Pre-compute OpenID configuration
+        let openid_config = Arc::new(json!({
+            "issuer": issuer.as_ref(),
+            "jwks_uri": jwks_uri,
+        }));
+
+        // Pre-render HTML template to avoid allocation on every request
+        #[cfg(not(feature = "headless"))]
+        let cached_html = {
+            const TEMPLATE: &str = include_str!("../website/index.html");
+            const VERSION: &str = env!("CARGO_PKG_VERSION");
+            let html = TEMPLATE
+                .replace("{{ISSUER}}", &issuer)
+                .replace("{{VERSION}}", VERSION);
+            Arc::from(html.as_str())
+        };
+
         Self {
             issuer,
-            algorithms,
+            algorithms: Arc::from(algorithms),
             key: Arc::new(key),
+            openid_config,
+            jwks_response,
+            #[cfg(not(feature = "headless"))]
+            cached_html,
         }
     }
 }
@@ -115,13 +155,8 @@ async fn root() -> &'static str {
 /// Root endpoint serving the web UI
 #[cfg(not(feature = "headless"))]
 async fn root(State(state): State<ServerState>) -> Html<String> {
-    const TEMPLATE: &str = include_str!("../website/index.html");
-    const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-    let html = TEMPLATE
-        .replace("{{ISSUER}}", &state.issuer)
-        .replace("{{VERSION}}", VERSION);
-    Html(html)
+    // Arc clone is cheap (just ref count increment), then convert to String for response
+    Html(state.cached_html.to_string())
 }
 
 /// Serve static files from the embedded website directory
@@ -177,33 +212,24 @@ fn get_mime_type(path: &str) -> &'static str {
 /// OpenID Connect discovery endpoint
 ///
 /// Returns OpenID Provider configuration metadata as defined in
-/// OpenID Connect Discovery 1.0 specification
+/// OpenID Connect Discovery 1.0 specification.
+/// Response is pre-computed at startup to avoid allocations on each request.
 async fn openid_discovery(State(state): State<ServerState>) -> Json<Value> {
-    let jwks_uri = format!("{}/.well-known/jwks.json", state.issuer);
-
-    Json(json!({
-        "issuer": state.issuer,
-        "jwks_uri": jwks_uri,
-    }))
+    // Arc clone is cheap (just ref count increment)
+    Json((*state.openid_config).clone())
 }
 
 /// JSON Web Key Set (JWKS) endpoint
 ///
 /// Returns the server's public keys in JWK format for JWT signature verification.
-/// Implements RFC 7517 (JSON Web Key) and RFC 7518 (JSON Web Algorithms)
+/// Implements RFC 7517 (JSON Web Key) and RFC 7518 (JSON Web Algorithms).
+/// Response is pre-computed at startup to avoid allocations on each request.
 ///
 /// Generates one JWK per configured algorithm, allowing the same key to be used
 /// with multiple signing algorithms (RS256, RS384, RS512).
 async fn jwks(State(state): State<ServerState>) -> Json<Value> {
-    let keys: Vec<Value> = state
-        .algorithms
-        .iter()
-        .map(|alg| state.key.to_jwk(alg))
-        .collect();
-
-    Json(json!({
-        "keys": keys
-    }))
+    // Arc clone is cheap (just ref count increment)
+    Json((*state.jwks_response).clone())
 }
 
 /// JWT signing endpoint with default algorithm (RS256)
@@ -276,7 +302,7 @@ async fn sign_with_alg(
     // Inject 'iss' claim if not present
     if let Some(claims_obj) = claims.as_object_mut() {
         if !claims_obj.contains_key("iss") {
-            claims_obj.insert("iss".to_string(), json!(state.issuer));
+            claims_obj.insert("iss".to_string(), json!(state.issuer.as_ref()));
         }
     }
 
