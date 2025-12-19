@@ -10,6 +10,10 @@ repository = "https://github.com/sbstjn/jwkserve"
 keywords = ["jwt", "jwks", "authentication", "development", "cli"]
 categories = ["authentication", "command-line-utilities", "development-tools", "development-tools::testing", "web-programming::http-server"]
 
+[features]
+default = []
+headless = []
+
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
 thiserror = "2.0.17"

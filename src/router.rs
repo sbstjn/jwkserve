@@ -1,11 +1,10 @@
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
-    http::{header, Request, StatusCode},
-    response::{Html, IntoResponse, Json, Response},
+    http::{Request, StatusCode},
+    response::{IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
-use include_dir::{include_dir, Dir};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
@@ -17,7 +16,14 @@ use tracing::Span;
 
 use crate::{key::RsaPrivateKey, KeySignAlgorithm};
 
+#[cfg(not(feature = "headless"))]
+use axum::{http::header, response::Html};
+
+#[cfg(not(feature = "headless"))]
+use include_dir::{include_dir, Dir};
+
 /// Embedded website directory, bundled at compile time
+#[cfg(not(feature = "headless"))]
 static WEBSITE_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/website");
 
 /// Shared application state containing server configuration and cryptographic keys
@@ -53,13 +59,17 @@ pub fn build_router(state: ServerState) -> Router {
     // Set maximum request body size to 1MB to prevent resource exhaustion
     const MAX_BODY_SIZE: usize = 1024 * 1024; // 1MB
 
-    Router::new()
+    let router = Router::new()
         .route("/", get(root))
         .route("/.well-known/openid-configuration", get(openid_discovery))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/sign", post(sign_default))
-        .route("/sign/{algorithm}", post(sign_with_algorithm))
-        .route("/{*path}", get(serve_static))
+        .route("/sign/{algorithm}", post(sign_with_algorithm));
+
+    #[cfg(not(feature = "headless"))]
+    let router = router.route("/{*path}", get(serve_static));
+
+    router
         .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .layer(
             TraceLayer::new_for_http()
@@ -96,7 +106,14 @@ pub fn build_router(state: ServerState) -> Router {
         .with_state(state)
 }
 
+/// Root endpoint serving the web UI or health check
+#[cfg(feature = "headless")]
+async fn root() -> &'static str {
+    "OK"
+}
+
 /// Root endpoint serving the web UI
+#[cfg(not(feature = "headless"))]
 async fn root(State(state): State<ServerState>) -> Html<String> {
     const TEMPLATE: &str = include_str!("../website/index.html");
     const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -108,6 +125,7 @@ async fn root(State(state): State<ServerState>) -> Html<String> {
 }
 
 /// Serve static files from the embedded website directory
+#[cfg(not(feature = "headless"))]
 async fn serve_static(Path(path): Path<String>) -> Response {
     // Remove leading slash for directory lookup
     let path = path.trim_start_matches('/');
@@ -129,6 +147,7 @@ async fn serve_static(Path(path): Path<String>) -> Response {
 }
 
 /// Determine MIME type based on file extension
+#[cfg(not(feature = "headless"))]
 fn get_mime_type(path: &str) -> &'static str {
     if path.ends_with(".html") {
         "text/html; charset=utf-8"
