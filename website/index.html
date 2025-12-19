@@ -1041,6 +1041,14 @@
             }
         });
 
+        // Hide Save Claims checkbox on production domain
+        if (location.href.includes('jwkserve.com')) {
+            const persistControl = document.querySelector('.persist-control');
+            if (persistControl) {
+                persistControl.style.display = 'none';
+            }
+        }
+
         initializeClaims();
         updateTimestampDisplay();
         generateToken();
