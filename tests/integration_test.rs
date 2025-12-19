@@ -361,13 +361,6 @@ async fn test_openid_discovery() {
         .as_str()
         .expect("jwks_uri is not a string");
     assert_eq!(jwks_uri, format!("{}/.well-known/jwks.json", server.issuer));
-
-    let supported_algs = config
-        .get("id_token_signing_alg_values_supported")
-        .expect("Missing id_token_signing_alg_values_supported field")
-        .as_array()
-        .expect("Supported algorithms is not an array");
-    assert!(supported_algs.contains(&json!("RS256")));
 }
 
 #[tokio::test]

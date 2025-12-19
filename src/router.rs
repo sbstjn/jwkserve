@@ -1,10 +1,11 @@
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
-    http::{Request, StatusCode},
+    http::{header, Request, StatusCode},
     response::{Html, IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
+use include_dir::{include_dir, Dir};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
@@ -15,6 +16,9 @@ use tower_http::{
 use tracing::Span;
 
 use crate::{key::RsaPrivateKey, KeySignAlgorithm};
+
+/// Embedded website directory, bundled at compile time
+static WEBSITE_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/website");
 
 /// Shared application state containing server configuration and cryptographic keys
 #[derive(Clone)]
@@ -55,6 +59,7 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/.well-known/jwks.json", get(jwks))
         .route("/sign", post(sign_default))
         .route("/sign/{algorithm}", post(sign_with_algorithm))
+        .route("/{*path}", get(serve_static))
         .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .layer(
             TraceLayer::new_for_http()
@@ -100,6 +105,54 @@ async fn root(State(state): State<ServerState>) -> Html<String> {
         .replace("{{ISSUER}}", &state.issuer)
         .replace("{{VERSION}}", VERSION);
     Html(html)
+}
+
+/// Serve static files from the embedded website directory
+async fn serve_static(Path(path): Path<String>) -> Response {
+    // Remove leading slash for directory lookup
+    let path = path.trim_start_matches('/');
+
+    match WEBSITE_DIR.get_file(path) {
+        Some(file) => {
+            let mime_type = get_mime_type(path);
+            let contents = file.contents();
+
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, mime_type)],
+                contents,
+            )
+                .into_response()
+        }
+        None => (StatusCode::NOT_FOUND, "404 Not Found").into_response(),
+    }
+}
+
+/// Determine MIME type based on file extension
+fn get_mime_type(path: &str) -> &'static str {
+    if path.ends_with(".html") {
+        "text/html; charset=utf-8"
+    } else if path.ends_with(".css") {
+        "text/css; charset=utf-8"
+    } else if path.ends_with(".js") {
+        "application/javascript; charset=utf-8"
+    } else if path.ends_with(".json") {
+        "application/json"
+    } else if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
+    } else if path.ends_with(".ico") {
+        "image/x-icon"
+    } else if path.ends_with(".txt") {
+        "text/plain; charset=utf-8"
+    } else if path.ends_with(".webp") {
+        "image/webp"
+    } else {
+        "application/octet-stream"
+    }
 }
 
 /// OpenID Connect discovery endpoint
