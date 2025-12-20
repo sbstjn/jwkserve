@@ -34,7 +34,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 axum = "0.8.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.145"
-jsonwebtoken = "9.3"
+jsonwebtoken = { version = "10.2.0", features = ["aws_lc_rs"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 url = "2.5"
 tower-http = { version = "0.6.7", features = ["cors", "trace"] }
