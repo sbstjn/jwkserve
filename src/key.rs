@@ -194,7 +194,7 @@ impl RsaPrivateKey {
         let thumbprint = hasher.finalize();
         let kid_base = base64::encode(&thumbprint);
 
-        format!("{}-{}", kid_base, alg.as_str())
+        format!("{}-{}", kid_base, alg.as_ref())
     }
 
     pub fn to_jwk(&self, alg: &KeySignAlgorithm) -> Value {
@@ -210,7 +210,7 @@ impl RsaPrivateKey {
             "kty": "RSA",
             "use": "sig",
             "kid": kid,
-            "alg": alg.as_str(),
+            "alg": alg.as_ref(),
             "n": n_b64,
             "e": e_b64
         })
@@ -231,6 +231,18 @@ impl EcdsaCurve {
             Self::P384 => "P-384",
             Self::P521 => "P-521",
         }
+    }
+}
+
+impl std::fmt::Display for EcdsaCurve {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl AsRef<str> for EcdsaCurve {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -383,7 +395,7 @@ impl EcdsaPrivateKey {
         };
 
         pem.map_err(|_| KeyError::FailedToEncode {
-            key_type: format!("ECDSA {}", self.curve.as_str()),
+            key_type: format!("ECDSA {}", self.curve),
         })
     }
 
@@ -402,9 +414,8 @@ impl EcdsaPrivateKey {
             | (EcdsaCurve::P521, KeySignAlgorithm::ES512) => {}
             _ => {
                 return Err(KeyError::FailedToSign(format!(
-                    "algorithm {:?} does not match curve {}",
-                    algorithm,
-                    self.curve.as_str()
+                    "algorithm {} does not match curve {}",
+                    algorithm, self.curve
                 )))
             }
         }
@@ -474,16 +485,17 @@ impl EcdsaPrivateKey {
 
         let x_b64 = base64::encode(&x_bytes);
         let y_b64 = base64::encode(&y_bytes);
-        let crv = self.curve.as_str();
 
-        let thumbprint_input =
-            format!(r#"{{"crv":"{crv}","kty":"EC","x":"{x_b64}","y":"{y_b64}"}}"#);
+        let thumbprint_input = format!(
+            r#"{{"crv":"{}","kty":"EC","x":"{x_b64}","y":"{y_b64}"}}"#,
+            self.curve
+        );
         let mut hasher = Sha256::new();
         hasher.update(thumbprint_input.as_bytes());
         let thumbprint = hasher.finalize();
         let kid_base = base64::encode(&thumbprint);
 
-        format!("{}-{}", kid_base, alg.as_str())
+        format!("{}-{}", kid_base, alg.as_ref())
     }
 
     pub fn to_jwk(&self, alg: &KeySignAlgorithm) -> Value {
@@ -497,9 +509,9 @@ impl EcdsaPrivateKey {
         json!({
             "kty": "EC",
             "use": "sig",
-            "crv": self.curve.as_str(),
+            "crv": self.curve.as_ref(),
             "kid": kid,
-            "alg": alg.as_str(),
+            "alg": alg.as_ref(),
             "x": x_b64,
             "y": y_b64
         })

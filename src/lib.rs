@@ -86,6 +86,12 @@ impl std::fmt::Display for KeySignAlgorithm {
     }
 }
 
+impl AsRef<str> for KeySignAlgorithm {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
