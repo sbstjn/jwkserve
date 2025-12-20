@@ -240,6 +240,7 @@ jobs:
       - name: Create private key file
         run: |
           cd infrastructure
+          mkdir fixtures
           echo "${{ secrets.JWKSERVE_KEY_RSA_4096 }}" > fixtures/rsa4096.key
           echo "${{ secrets.JWKSERVE_KEY_ECDSA_256 }}" > fixtures/ecdsa256.key
           echo "${{ secrets.JWKSERVE_KEY_ECDSA_384 }}" > fixtures/ecdsa384.key
