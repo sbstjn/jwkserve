@@ -6,9 +6,9 @@
 [![CI](https://github.com/sbstjn/jwkserve/actions/workflows/release.yml/badge.svg)](https://github.com/sbstjn/jwkserve/actions/workflows/release.yml)
 [![CI](https://github.com/sbstjn/jwkserve/actions/workflows/build.yml/badge.svg)](https://github.com/sbstjn/jwkserve/actions/workflows/build.yml)
 
-> A fake authentication service to speed up local development for JWT consumers.
+> Zero-config JWT generation with JWKS support to accelerate local development and rapid prototyping.
 
-Running integration tests with JWT authentication based on JWKS often requires a real identity provider, which adds complexity when testing locally or in pipelines. `jwkserve` addresses this by generating JWT access tokens for any combination of claims and serving the JWKS endpoints needed for integration.
+Speed up local development with instant JWT generation. Running integration tests with JWT authentication based on JWKS typically requires a real identity provider—external services, API keys, network latency—all adding friction to your development loop. `jwkserve` eliminates this overhead: no external dependencies, no configuration files, just run the binary and start signing tokens locally. Generate JWT access tokens for any combination of claims while serving the OpenID Connect and JWKS endpoints your integrations expect.
 
 Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve) and [jwkserve.com](https://jwkserve.com).
 
@@ -27,7 +27,7 @@ When validating a JWT access token using JWKS per [RFC 7519](https://datatracker
 * Fetch the provided JWKS Endpoint (usually at `/.well-known/jwks.json`)
 * Parse JSON structure and retrieve key with `kid` from JWT `Header`
 
-When writing automated tests for authentication and authorisation flows, requiring a real identity provider adds unnecessary complexity. `jwkserve` serves the needed endpoints and enables straightforward generation of generic claims and token structures.
+When writing automated tests for authentication and authorisation flows, requiring a real identity provider adds unnecessary complexity and slows iteration. `jwkserve` delivers zero-config JWKS endpoints and instant token generation, enabling rapid prototyping with arbitrary claims and token structures.
 
 ## Installation
 
@@ -44,9 +44,9 @@ $ > docker pull sbstjn/jwkserve:latest
 
 ## Usage
 
-Think of `jwkserve` as a token vending machine that signs any payload as a valid JWT access token. It speeds up writing integration tests, especially in complex scenarios with different custom claims.
+Zero-config by design: `jwkserve` auto-generates cryptographic keys on startup and immediately serves all required endpoints. No configuration files, no external dependencies, no setup steps. Sign arbitrary payloads as valid JWT access tokens instantly—perfect for rapid prototyping, integration testing, and CI/CD pipelines where speed matters.
 
-Depending on how you've installed it, you can use the binary:
+Start the binary:
 
 ```bash
 # Use local binary
@@ -129,7 +129,7 @@ $ > curl http://localhost:3000/.well-known/jwks.json
 
 ### Custom Keys
 
-By default, `serve` generates temporary keys on startup. For faster restarts during development, use persisted keys:
+Zero-config defaults: `serve` auto-generates ephemeral keys on every startup—ideal for throwaway test environments. For faster restarts during iterative development, persist keys to disk:
 
 ```bash
 # Generate RSA key (sizes: 2048, 3072, 4096)

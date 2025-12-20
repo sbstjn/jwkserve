@@ -179,32 +179,53 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
     // Load keys from files and auto-detect their types
     let mut collection = load_keys(&args.key_files)?;
 
-    // Generate missing keys
+    // Determine which keys to log based on configured algorithms
+    use crate::KeyType;
+    let log_rsa = algorithms.iter().any(|alg| alg.key_type() == KeyType::Rsa);
+    let log_p256 = algorithms
+        .iter()
+        .any(|alg| alg.curve() == Some(EcdsaCurve::P256));
+    let log_p384 = algorithms
+        .iter()
+        .any(|alg| alg.curve() == Some(EcdsaCurve::P384));
+    let log_p521 = algorithms
+        .iter()
+        .any(|alg| alg.curve() == Some(EcdsaCurve::P521));
+
+    // Always generate all keys (needed for signing flexibility), but only log configured ones
     let rsa_key = if let Some(key) = collection.rsa.take() {
         key
     } else {
-        info!("Generating new RSA-2048 key");
+        if log_rsa {
+            info!("Generating new RSA-2048 key");
+        }
         RsaPrivateKey::generate(2048).map_err(JWKServeError::KeyError)?
     };
 
     let ecdsa_p256_key = if let Some(key) = collection.ecdsa.remove(&EcdsaCurve::P256) {
         key
     } else {
-        info!("Generating ECDSA P-256 key");
+        if log_p256 {
+            info!("Generating ECDSA P-256 key");
+        }
         EcdsaPrivateKey::generate(EcdsaCurve::P256).map_err(JWKServeError::KeyError)?
     };
 
     let ecdsa_p384_key = if let Some(key) = collection.ecdsa.remove(&EcdsaCurve::P384) {
         key
     } else {
-        info!("Generating ECDSA P-384 key");
+        if log_p384 {
+            info!("Generating ECDSA P-384 key");
+        }
         EcdsaPrivateKey::generate(EcdsaCurve::P384).map_err(JWKServeError::KeyError)?
     };
 
     let ecdsa_p521_key = if let Some(key) = collection.ecdsa.remove(&EcdsaCurve::P521) {
         key
     } else {
-        info!("Generating ECDSA P-521 key");
+        if log_p521 {
+            info!("Generating ECDSA P-521 key");
+        }
         EcdsaPrivateKey::generate(EcdsaCurve::P521).map_err(JWKServeError::KeyError)?
     };
 

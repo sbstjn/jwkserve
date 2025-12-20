@@ -85,13 +85,13 @@ impl ServerState {
         let issuer: Arc<str> = Arc::from(issuer.as_str());
         let jwks_uri = format!("{}/.well-known/jwks.json", issuer);
 
-        // Store all keys for signing support (supports all algorithms regardless of config)
+        // Store all keys (needed for signing with any algorithm)
         let rsa_key_arc = Arc::new(rsa_key);
         let ecdsa_p256_arc = Arc::new(ecdsa_p256_key);
         let ecdsa_p384_arc = Arc::new(ecdsa_p384_key);
         let ecdsa_p521_arc = Arc::new(ecdsa_p521_key);
 
-        // Build key storage for ALL possible algorithms (for signing)
+        // Build key storage for ALL algorithms (signing flexibility for testing)
         let mut key_map: HashMap<KeySignAlgorithm, CryptoKey> = HashMap::new();
 
         // Map RSA algorithms
@@ -431,7 +431,7 @@ async fn sign_with_algorithm(
         }
     }
 
-    // Get the key for this algorithm (should always exist)
+    // Get the key for this algorithm (all algorithms are always available)
     let key = state
         .get_key(&algorithm)
         .expect("all algorithms should have keys");

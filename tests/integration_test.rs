@@ -214,12 +214,12 @@ async fn test_algorithm_mismatch() {
         .await
         .expect("Failed to spawn server");
 
-    // Sign with RS384 (not in JWKS)
+    // Sign with RS384 (not in JWKS but still supported for testing)
     let claims = json!({"sub": "user", "exp": 9999999999_i64});
     let token = server
         .sign_jwt(claims, Some("RS384"))
         .await
-        .expect("Signing should work");
+        .expect("Signing should work with any algorithm");
 
     let jwks = server.fetch_jwks().await.expect("Failed to fetch JWKS");
 
