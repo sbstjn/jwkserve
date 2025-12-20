@@ -219,6 +219,7 @@ fn find_available_port() -> color_eyre::Result<u16> {
 }
 
 /// Extract JWT header information
+#[allow(dead_code)]
 pub fn decode_jwt_header(token: &str) -> color_eyre::Result<jsonwebtoken::Header> {
     use jsonwebtoken::decode_header;
     Ok(decode_header(token)?)
