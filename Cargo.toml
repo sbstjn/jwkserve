@@ -22,7 +22,7 @@ rand = "0.8"
 sha2 = "0.10"
 der = { version = "0.7", default-features = false, features = ["alloc"] }
 base64 = "0.22"
-aws-lc-rs = "1"
+aws-lc-rs = "1.15.2"
 p256 = { version = "0.14.0-rc.1", features = ["pem", "ecdsa"] }
 p384 = { version = "0.14.0-rc.1", features = ["pem", "ecdsa"] }
 p521 = { version = "0.14.0-rc.1", features = ["pem", "ecdsa"] }

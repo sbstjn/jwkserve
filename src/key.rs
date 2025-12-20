@@ -9,7 +9,7 @@ use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey};
 use rsa::traits::PublicKeyParts;
 use rsa::RsaPublicKey;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256, Sha512};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::KeySignAlgorithm;
@@ -453,12 +453,10 @@ impl EcdsaPrivateKey {
 
         let signing_input = format!("{}.{}", header_b64, claims_b64);
 
-        let mut hasher = Sha512::new();
-        hasher.update(signing_input.as_bytes());
-        let message_hash = hasher.finalize();
-
+        // Sign the raw message - the ECDSA signer internally handles SHA-512 hashing
+        // per RFC 7518 Section 3.4 (ES512 = ECDSA using P-521 and SHA-512)
         let signature: P521Signature = match &self.inner {
-            EcdsaKey::P521(key) => key.sign(&message_hash),
+            EcdsaKey::P521(key) => key.sign(signing_input.as_bytes()),
             _ => {
                 return Err(KeyError::FailedToSign(
                     "P-521 key required for ES512".to_string(),
