@@ -17,6 +17,8 @@ pub enum KeySignAlgorithm {
     ES256,
     #[value(name = "ES384")]
     ES384,
+    #[value(name = "ES512")]
+    ES512,
 }
 
 impl KeySignAlgorithm {
@@ -27,6 +29,7 @@ impl KeySignAlgorithm {
             Self::RS512 => "RS512",
             Self::ES256 => "ES256",
             Self::ES384 => "ES384",
+            Self::ES512 => "ES512",
         }
     }
 }
@@ -41,8 +44,9 @@ impl std::str::FromStr for KeySignAlgorithm {
             "RS512" => Ok(Self::RS512),
             "ES256" => Ok(Self::ES256),
             "ES384" => Ok(Self::ES384),
+            "ES512" => Ok(Self::ES512),
             _ => Err(format!(
-                "unsupported algorithm: {s}. Valid algorithms: RS256, RS384, RS512, ES256, ES384"
+                "unsupported algorithm: {s}. Valid algorithms: RS256, RS384, RS512, ES256, ES384, ES512"
             )),
         }
     }
@@ -65,5 +69,6 @@ mod tests {
         assert_eq!(format!("{}", KeySignAlgorithm::RS512), "RS512");
         assert_eq!(format!("{}", KeySignAlgorithm::ES256), "ES256");
         assert_eq!(format!("{}", KeySignAlgorithm::ES384), "ES384");
+        assert_eq!(format!("{}", KeySignAlgorithm::ES512), "ES512");
     }
 }

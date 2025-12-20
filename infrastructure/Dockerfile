@@ -1,5 +1,5 @@
 FROM sbstjn/jwkserve:latest AS jwkserve
 
-COPY private.key /private.key
+COPY fixtures/*.key /fixtures/
 
-CMD ["jwkserve", "serve", "--algorithm", "RS256", "--algorithm", "RS384", "--port", "3000", "--key", "/private.key", "--bind", "0.0.0.0", "--issuer", "https://jwkserve.com"]
+CMD ["jwkserve", "serve", "--port", "3000", "--key", "/fixtures/rsa4096.key", "--key", "/fixtures/ecdsa256.key", "--key", "/fixtures/ecdsa384.key", "--key", "/fixtures/ecdsa521.key", "--bind", "0.0.0.0", "--issuer", "https://jwkserve.com"]

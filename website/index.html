@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open-Source JWT Generator with JWKS Support | jwkserve</title>
-    <meta name="description" content="Speed up local development with instant JWT generation. Open-source tool with OpenID Connect and JWKS endpoints. No external dependencies - sign tokens locally using RS256, RS384, RS512. Perfect for rapid prototyping and CI/CD pipelines.">
-    <meta name="keywords" content="JWT, JSON Web Token, generator, testing, development, JWKS, OpenID Connect, RS256, RS384, RS512, CI/CD, Docker, authentication, authorization">
+    <meta name="description" content="Speed up local development with instant JWT generation. Open-source tool with OpenID Connect and JWKS endpoints. No external dependencies - sign tokens locally using RS256, RS384, RS512, ES256, ES384, ES512. Perfect for rapid prototyping and CI/CD pipelines.">
+    <meta name="keywords" content="JWT, JSON Web Token, generator, testing, development, JWKS, OpenID Connect, RS256, RS384, RS512, ES256, ES384, ES512, ECDSA, P-256, P-384, P-521, CI/CD, Docker, authentication, authorization">
     <meta name="author" content="sbstjn.com">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://jwkserve.com/">
@@ -14,7 +14,7 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://jwkserve.com/">
     <meta property="og:title" content="Open-Source JWT Generator with JWKS Support | jwkserve">
-    <meta property="og:description" content="Speed up local development with instant JWT generation. Open-source tool with OpenID Connect and JWKS endpoints. No external dependencies - sign tokens locally using RS256, RS384, RS512. Perfect for rapid prototyping and CI/CD pipelines.">
+    <meta property="og:description" content="Speed up local development with instant JWT generation. Open-source tool with OpenID Connect and JWKS endpoints. No external dependencies - sign tokens locally using RS256, RS384, RS512, ES256, ES384, ES512. Perfect for rapid prototyping and CI/CD pipelines.">
     <meta property="og:image" content="https://jwkserve.com/splash.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -25,7 +25,7 @@
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://jwkserve.com/">
     <meta property="twitter:title" content="Open-Source JWT Generator with JWKS Support | jwkserve">
-    <meta property="twitter:description" content="Speed up local development with instant JWT generation. Open-source tool with OpenID Connect and JWKS endpoints. No external dependencies - sign tokens locally using RS256, RS384, RS512. Perfect for rapid prototyping and CI/CD pipelines.">
+    <meta property="twitter:description" content="Speed up local development with instant JWT generation. Open-source tool with OpenID Connect and JWKS endpoints. No external dependencies - sign tokens locally using RS256, RS384, RS512, ES256, ES384, ES512. Perfect for rapid prototyping and CI/CD pipelines.">
     <meta property="twitter:image" content="https://jwkserve.com/splash.png">
     <meta property="twitter:image:alt" content="jwkserve - Zero-config JWT generation with JWKS and OpenID Connect for rapid prototyping">
     
@@ -511,9 +511,16 @@
                     <div class="algorithm-select">
                         <label for="algorithm">Algorithm:</label>
                         <select id="algorithm">
-                            <option value="RS256">RS256</option>
-                            <option value="RS384">RS384</option>
-                            <option value="RS512">RS512</option>
+                            <optgroup label="RSA">
+                                <option value="RS256">RS256</option>
+                                <option value="RS384">RS384</option>
+                                <option value="RS512">RS512</option>
+                            </optgroup>
+                            <optgroup label="ECDSA">
+                                <option value="ES256">ES256 (P-256)</option>
+                                <option value="ES384">ES384 (P-384)</option>
+                                <option value="ES512">ES512 (P-521)</option>
+                            </optgroup>
                         </select>
                     </div>
                     <div class="status" id="status">
@@ -919,9 +926,31 @@
             }
 
             const algorithm = algorithmSelect.value;
-            const endpoint = algorithm === 'RS256' 
-                ? `${API_BASE}/sign`
-                : `${API_BASE}/sign/${algorithm}`;
+            
+            // Map algorithm to new endpoint structure
+            let endpoint;
+            switch (algorithm) {
+                case 'RS256':
+                    endpoint = `${API_BASE}/sign/rsa/256`;
+                    break;
+                case 'RS384':
+                    endpoint = `${API_BASE}/sign/rsa/384`;
+                    break;
+                case 'RS512':
+                    endpoint = `${API_BASE}/sign/rsa/512`;
+                    break;
+                case 'ES256':
+                    endpoint = `${API_BASE}/sign/ecdsa/256`;
+                    break;
+                case 'ES384':
+                    endpoint = `${API_BASE}/sign/ecdsa/384`;
+                    break;
+                case 'ES512':
+                    endpoint = `${API_BASE}/sign/ecdsa/521`;
+                    break;
+                default:
+                    endpoint = `${API_BASE}/sign`;
+            }
 
             setLoading(true);
 

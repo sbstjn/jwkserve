@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use tokio::task::JoinHandle;
 
 use jwkserve::{
-    key::RsaPrivateKey,
+    key::{EcdsaCurve, EcdsaPrivateKey, RsaPrivateKey},
     router::{build_router, ServerState},
     KeySignAlgorithm,
 };
@@ -61,8 +61,23 @@ impl TestServer {
         let issuer = format!("http://localhost:{port}");
         let base_url = issuer.clone();
 
+        // Generate ECDSA keys for all test servers
+        let ecdsa_p256 = EcdsaPrivateKey::generate(EcdsaCurve::P256)
+            .map_err(|e| color_eyre::eyre::eyre!("Failed to generate P-256 key: {}", e))?;
+        let ecdsa_p384 = EcdsaPrivateKey::generate(EcdsaCurve::P384)
+            .map_err(|e| color_eyre::eyre::eyre!("Failed to generate P-384 key: {}", e))?;
+        let ecdsa_p521 = EcdsaPrivateKey::generate(EcdsaCurve::P521)
+            .map_err(|e| color_eyre::eyre::eyre!("Failed to generate P-521 key: {}", e))?;
+
         // Build router with state
-        let state = ServerState::new(issuer.clone(), algorithms, key);
+        let state = ServerState::new(
+            issuer.clone(),
+            algorithms,
+            key,
+            ecdsa_p256,
+            ecdsa_p384,
+            ecdsa_p521,
+        );
         let router = build_router(state);
 
         // Spawn server
@@ -106,7 +121,17 @@ impl TestServer {
         algorithm: Option<&str>,
     ) -> color_eyre::Result<String> {
         let url = if let Some(alg) = algorithm {
-            format!("{}/sign/{}", self.base_url, alg)
+            // Map old algorithm format to new endpoint structure
+            let path = match alg.to_uppercase().as_str() {
+                "RS256" => "sign/rsa/256",
+                "RS384" => "sign/rsa/384",
+                "RS512" => "sign/rsa/512",
+                "ES256" => "sign/ecdsa/256",
+                "ES384" => "sign/ecdsa/384",
+                "ES512" => "sign/ecdsa/521",
+                _ => return Err(color_eyre::eyre::eyre!("Unknown algorithm: {}", alg)),
+            };
+            format!("{}/{}", self.base_url, path)
         } else {
             format!("{}/sign", self.base_url)
         };

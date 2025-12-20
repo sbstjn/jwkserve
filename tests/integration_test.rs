@@ -462,9 +462,9 @@ async fn test_invalid_algorithm() {
     let claims = json!({"sub": "user", "exp": 9999999999_i64});
     let client = reqwest::Client::new();
 
-    // Try to sign with invalid algorithm
+    // Try to sign with invalid RSA size
     let response = client
-        .post(format!("{}/sign/INVALID", server.base_url))
+        .post(format!("{}/sign/rsa/999", server.base_url))
         .json(&claims)
         .send()
         .await
@@ -473,7 +473,7 @@ async fn test_invalid_algorithm() {
     assert_eq!(
         response.status(),
         reqwest::StatusCode::BAD_REQUEST,
-        "Should return 400 for invalid algorithm"
+        "Should return 400 for invalid RSA size"
     );
 
     let error_response: serde_json::Value = response.json().await.expect("Failed to parse error");
@@ -482,8 +482,8 @@ async fn test_invalid_algorithm() {
             .get("error")
             .and_then(|e| e.as_str())
             .unwrap_or("")
-            .contains("unsupported algorithm"),
-        "Error message should mention unsupported algorithm"
+            .contains("invalid RSA size"),
+        "Error message should mention invalid RSA size"
     );
 }
 

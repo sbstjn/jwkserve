@@ -6,7 +6,7 @@ use clap::Args;
 
 use crate::{
     errors::JWKServeError,
-    key::RsaPrivateKey,
+    key::{EcdsaCurve, EcdsaPrivateKey, RsaPrivateKey},
     router::{build_router, ServerState},
     KeySignAlgorithm,
 };
@@ -29,9 +29,9 @@ pub struct ArgsServe {
     #[arg(short, long = "algorithm", value_enum, value_name = "ALG")]
     pub algorithms: Vec<KeySignAlgorithm>,
 
-    /// Path to PEM-encoded RSA private key file (generates new key if not provided)
+    /// Path to PEM-encoded private key file(s) - can be specified multiple times for different key types (RSA, ECDSA P-256, P-384, P-521). Keys are auto-detected. Missing key types are generated.
     #[arg(short, long = "key", value_name = "FILE")]
-    pub key_file: Option<PathBuf>,
+    pub key_files: Vec<PathBuf>,
 }
 
 /// Generate issuer URL from bind address and port
@@ -93,6 +93,50 @@ fn validate_bind_address(addr: &str) -> color_eyre::Result<IpAddr> {
         .map_err(|_| color_eyre::eyre::eyre!("invalid bind address: {}", addr))
 }
 
+/// Detected key type from PEM file
+enum DetectedKey {
+    Rsa(RsaPrivateKey),
+    EcdsaP256(EcdsaPrivateKey),
+    EcdsaP384(EcdsaPrivateKey),
+    EcdsaP521(EcdsaPrivateKey),
+}
+
+/// Load and auto-detect key type from PEM file
+///
+/// Attempts to parse the key as RSA first, then tries each ECDSA curve.
+/// Returns an error if the key cannot be parsed as any supported type.
+fn load_and_detect_key(path: &std::path::Path) -> color_eyre::Result<DetectedKey> {
+    // Try RSA first
+    if let Ok(key) = RsaPrivateKey::from_pem_file(path) {
+        info!("Loaded RSA key from {:?} ({} bits)", path, key.size_bits());
+        return Ok(DetectedKey::Rsa(key));
+    }
+
+    // Try ECDSA keys
+    if let Ok(key) = EcdsaPrivateKey::from_pem_file(path) {
+        let curve = key.curve();
+        match curve {
+            EcdsaCurve::P256 => {
+                info!("Loaded ECDSA P-256 key from {:?}", path);
+                Ok(DetectedKey::EcdsaP256(key))
+            }
+            EcdsaCurve::P384 => {
+                info!("Loaded ECDSA P-384 key from {:?}", path);
+                Ok(DetectedKey::EcdsaP384(key))
+            }
+            EcdsaCurve::P521 => {
+                info!("Loaded ECDSA P-521 key from {:?}", path);
+                Ok(DetectedKey::EcdsaP521(key))
+            }
+        }
+    } else {
+        Err(color_eyre::eyre::eyre!(
+            "Failed to load key from {:?}: not a valid RSA or ECDSA (P-256, P-384, P-521) key",
+            path
+        ))
+    }
+}
+
 pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
     info!("Starting jwkserve");
 
@@ -108,22 +152,98 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
     };
 
     let algorithms = if args.algorithms.is_empty() {
-        &[KeySignAlgorithm::RS256][..]
+        &[
+            KeySignAlgorithm::RS256,
+            KeySignAlgorithm::RS384,
+            KeySignAlgorithm::RS512,
+            KeySignAlgorithm::ES256,
+            KeySignAlgorithm::ES384,
+            KeySignAlgorithm::ES512,
+        ][..]
     } else {
         &args.algorithms[..]
     };
 
-    let key: RsaPrivateKey = if let Some(key_file) = &args.key_file {
-        info!("Loading RSA key from file: {:?}", key_file);
-        RsaPrivateKey::from_pem_file(key_file).map_err(JWKServeError::KeyError)?
+    // Load keys from files and auto-detect their types
+    let mut rsa_key: Option<RsaPrivateKey> = None;
+    let mut ecdsa_p256_key: Option<EcdsaPrivateKey> = None;
+    let mut ecdsa_p384_key: Option<EcdsaPrivateKey> = None;
+    let mut ecdsa_p521_key: Option<EcdsaPrivateKey> = None;
+
+    for key_file in &args.key_files {
+        match load_and_detect_key(key_file)? {
+            DetectedKey::Rsa(key) => {
+                if rsa_key.is_some() {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Multiple RSA keys provided - only one RSA key is supported"
+                    ));
+                }
+                rsa_key = Some(key);
+            }
+            DetectedKey::EcdsaP256(key) => {
+                if ecdsa_p256_key.is_some() {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Multiple ECDSA P-256 keys provided - only one P-256 key is supported"
+                    ));
+                }
+                ecdsa_p256_key = Some(key);
+            }
+            DetectedKey::EcdsaP384(key) => {
+                if ecdsa_p384_key.is_some() {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Multiple ECDSA P-384 keys provided - only one P-384 key is supported"
+                    ));
+                }
+                ecdsa_p384_key = Some(key);
+            }
+            DetectedKey::EcdsaP521(key) => {
+                if ecdsa_p521_key.is_some() {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Multiple ECDSA P-521 keys provided - only one P-521 key is supported"
+                    ));
+                }
+                ecdsa_p521_key = Some(key);
+            }
+        }
+    }
+
+    // Generate missing keys
+    let rsa_key = if let Some(key) = rsa_key {
+        key
     } else {
         info!("Generating new RSA-2048 key");
         RsaPrivateKey::generate(2048).map_err(JWKServeError::KeyError)?
     };
 
-    info!("RSA key size: {} bits", key.size_bits());
+    let ecdsa_p256_key = if let Some(key) = ecdsa_p256_key {
+        key
+    } else {
+        info!("Generating ECDSA P-256 key");
+        EcdsaPrivateKey::generate(EcdsaCurve::P256).map_err(JWKServeError::KeyError)?
+    };
 
-    let state = ServerState::new(issuer.clone(), algorithms.to_vec(), key);
+    let ecdsa_p384_key = if let Some(key) = ecdsa_p384_key {
+        key
+    } else {
+        info!("Generating ECDSA P-384 key");
+        EcdsaPrivateKey::generate(EcdsaCurve::P384).map_err(JWKServeError::KeyError)?
+    };
+
+    let ecdsa_p521_key = if let Some(key) = ecdsa_p521_key {
+        key
+    } else {
+        info!("Generating ECDSA P-521 key");
+        EcdsaPrivateKey::generate(EcdsaCurve::P521).map_err(JWKServeError::KeyError)?
+    };
+
+    let state = ServerState::new(
+        issuer.clone(),
+        algorithms.to_vec(),
+        rsa_key,
+        ecdsa_p256_key,
+        ecdsa_p384_key,
+        ecdsa_p521_key,
+    );
     let router = build_router(state);
 
     let addr = SocketAddr::new(bind_ip, args.port);

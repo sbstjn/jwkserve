@@ -16,6 +16,5 @@ infrastructure/.terraform/
 infrastructure/.terraform.lock.hcl
 
 # Private keys
-infrastructure/*.key
-infrastructure/*.pem
+infrastructure/fixtures/
 infrastructure/.env

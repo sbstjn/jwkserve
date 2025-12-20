@@ -4,12 +4,12 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use p256::ecdsa::SigningKey as P256SigningKey;
 use p384::ecdsa::SigningKey as P384SigningKey;
-use p521::ecdsa::SigningKey as P521SigningKey;
+use p521::ecdsa::{signature::Signer, Signature as P521Signature, SigningKey as P521SigningKey};
 use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey};
 use rsa::traits::PublicKeyParts;
 use rsa::RsaPublicKey;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 use thiserror::Error;
 
 use crate::KeySignAlgorithm;
@@ -425,6 +425,25 @@ impl EcdsaPrivateKey {
         claims: &Value,
         algorithm: &KeySignAlgorithm,
     ) -> Result<String, KeyError> {
+        // Validate algorithm matches curve
+        match (&self.curve, algorithm) {
+            (EcdsaCurve::P256, KeySignAlgorithm::ES256)
+            | (EcdsaCurve::P384, KeySignAlgorithm::ES384)
+            | (EcdsaCurve::P521, KeySignAlgorithm::ES512) => {}
+            _ => {
+                return Err(KeyError::FailedToSign(format!(
+                    "algorithm {:?} does not match curve {}",
+                    algorithm,
+                    self.curve.as_str()
+                )))
+            }
+        }
+
+        // ES512 requires manual implementation as jsonwebtoken doesn't support it
+        if matches!(algorithm, KeySignAlgorithm::ES512) {
+            return self.sign_jwt_es512(claims);
+        }
+
         let alg = match algorithm {
             KeySignAlgorithm::ES256 => Algorithm::ES256,
             KeySignAlgorithm::ES384 => Algorithm::ES384,
@@ -434,19 +453,6 @@ impl EcdsaPrivateKey {
                 ))
             }
         };
-
-        // Validate algorithm matches curve
-        match (&self.curve, algorithm) {
-            (EcdsaCurve::P256, KeySignAlgorithm::ES256)
-            | (EcdsaCurve::P384, KeySignAlgorithm::ES384) => {}
-            _ => {
-                return Err(KeyError::FailedToSign(format!(
-                    "algorithm {:?} does not match curve {}",
-                    algorithm,
-                    self.curve.as_str()
-                )))
-            }
-        }
 
         // Use cached PEM encoding for efficiency
         let encoding_key = EncodingKey::from_ec_pem(self.pem_cache.as_bytes())
@@ -459,6 +465,54 @@ impl EcdsaPrivateKey {
         header.kid = Some(kid);
 
         encode(&header, claims, &encoding_key).map_err(|e| KeyError::FailedToSign(e.to_string()))
+    }
+
+    /// Manual JWT signing implementation for ES512 (P-521)
+    ///
+    /// Required because jsonwebtoken crate doesn't support ES512.
+    /// Implements JWT signing per RFC 7519 with ES512 algorithm (RFC 7518).
+    fn sign_jwt_es512(&self, claims: &Value) -> Result<String, KeyError> {
+        let kid = self.calculate_kid(&KeySignAlgorithm::ES512);
+
+        // Construct JWT header
+        let header = json!({
+            "alg": "ES512",
+            "typ": "JWT",
+            "kid": kid
+        });
+
+        // Base64url encode header and payload
+        let header_json = serde_json::to_string(&header)
+            .map_err(|e| KeyError::FailedToSign(format!("header serialization: {}", e)))?;
+        let claims_json = serde_json::to_string(&claims)
+            .map_err(|e| KeyError::FailedToSign(format!("claims serialization: {}", e)))?;
+
+        let header_b64 = URL_SAFE_NO_PAD.encode(header_json.as_bytes());
+        let claims_b64 = URL_SAFE_NO_PAD.encode(claims_json.as_bytes());
+
+        // Create signing input: header.payload
+        let signing_input = format!("{}.{}", header_b64, claims_b64);
+
+        // Hash the signing input with SHA-512 (per ES512 spec)
+        let mut hasher = Sha512::new();
+        hasher.update(signing_input.as_bytes());
+        let message_hash = hasher.finalize();
+
+        // Sign using P-521 key
+        let signature: P521Signature = match &self.inner {
+            EcdsaKey::P521(key) => key.sign(&message_hash),
+            _ => {
+                return Err(KeyError::FailedToSign(
+                    "P-521 key required for ES512".to_string(),
+                ))
+            }
+        };
+
+        // Encode signature in base64url
+        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+
+        // Construct final JWT: header.payload.signature
+        Ok(format!("{}.{}", signing_input, signature_b64))
     }
 
     /// Calculate Key ID (kid) for a given algorithm
