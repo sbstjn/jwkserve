@@ -1,10 +1,11 @@
 use std::time::Duration;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use clap::Args;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde_json::Value;
 use tracing::{debug, warn};
+
+use crate::utils::base64;
 
 #[derive(Args)]
 pub struct ArgsVerify {
@@ -88,8 +89,7 @@ pub async fn handle_verify(args: &ArgsVerify) -> color_eyre::Result<()> {
     let unverified: Value = {
         let parts: Vec<&str> = args.token.split('.').collect();
         if parts.len() >= 2 {
-            URL_SAFE_NO_PAD
-                .decode(parts[1])
+            base64::decode(parts[1])
                 .ok()
                 .and_then(|bytes| serde_json::from_slice(&bytes).ok())
                 .unwrap_or(Value::Null)

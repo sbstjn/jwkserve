@@ -3,6 +3,8 @@ pub mod errors;
 pub mod key;
 pub mod router;
 
+pub(crate) mod utils;
+
 use clap::ValueEnum;
 use key::EcdsaCurve;
 
@@ -63,6 +65,7 @@ impl std::str::FromStr for KeySignAlgorithm {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
+            "NONE" => Err("The 'none' algorithm is rejected for security reasons (RFC 8725)".to_string()),
             "RS256" => Ok(Self::RS256),
             "RS384" => Ok(Self::RS384),
             "RS512" => Ok(Self::RS512),
@@ -70,7 +73,8 @@ impl std::str::FromStr for KeySignAlgorithm {
             "ES384" => Ok(Self::ES384),
             "ES512" => Ok(Self::ES512),
             _ => Err(format!(
-                "unsupported algorithm: {s}. Valid algorithms: RS256, RS384, RS512, ES256, ES384, ES512"
+                "Algorithm '{}' is not supported. Valid algorithms: RS256, RS384, RS512, ES256, ES384, ES512",
+                s
             )),
         }
     }
@@ -114,5 +118,50 @@ mod tests {
         assert_eq!(KeySignAlgorithm::ES256.curve(), Some(EcdsaCurve::P256));
         assert_eq!(KeySignAlgorithm::ES384.curve(), Some(EcdsaCurve::P384));
         assert_eq!(KeySignAlgorithm::ES512.curve(), Some(EcdsaCurve::P521));
+    }
+
+    #[test]
+    fn test_algorithm_none_rejected() {
+        let result = "none".parse::<KeySignAlgorithm>();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("'none' algorithm is rejected"));
+        assert!(err.contains("RFC 8725"));
+
+        // Case insensitive
+        let result = "NONE".parse::<KeySignAlgorithm>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("'none' algorithm is rejected"));
+    }
+
+    #[test]
+    fn test_algorithm_unsupported() {
+        let result = "HS256".parse::<KeySignAlgorithm>();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("is not supported"));
+        assert!(err.contains("HS256"));
+    }
+
+    #[test]
+    fn test_algorithm_from_str_case_insensitive() {
+        // Lowercase should work
+        assert!("rs256".parse::<KeySignAlgorithm>().is_ok());
+        assert!("es256".parse::<KeySignAlgorithm>().is_ok());
+
+        // Mixed case should work
+        assert!("Rs256".parse::<KeySignAlgorithm>().is_ok());
+        assert!("eS384".parse::<KeySignAlgorithm>().is_ok());
+    }
+
+    #[test]
+    fn test_algorithm_error_message_format() {
+        let result = "UNKNOWN".parse::<KeySignAlgorithm>();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        // Should use aligned format: "Algorithm 'X' is not supported"
+        assert!(err.contains("Algorithm"));
+        assert!(err.contains("is not supported"));
+        assert!(err.contains("UNKNOWN"));
     }
 }
