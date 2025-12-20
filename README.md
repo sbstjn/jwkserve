@@ -54,9 +54,11 @@ $ > jwkserve serve
 
 INFO Starting jwkserve
 INFO Generating new RSA-2048 key
-INFO RSA key size: 2048 bits
-INFO Server listening on 0.0.0.0:3000 for issuer http://localhost:3000
-INFO Supported algorithms: [RS256]
+INFO Generating ECDSA P-256 key
+INFO Generating ECDSA P-384 key
+INFO Generating ECDSA P-521 key
+INFO Server listening on 127.0.0.1:3000 for issuer http://127.0.0.1:3000
+INFO Supported algorithms: [RS256, RS384, RS512, ES256, ES384, ES512]
 ```
 
 or use the provided Docker container:
@@ -65,13 +67,16 @@ or use the provided Docker container:
 # Use docker container
 $ > docker run -it \
     -p 3000:3000 \
-    sbstjn/jwkserve:latest
+    sbstjn/jwkserve:latest \
+    jwkserve serve --bind 0.0.0.0
 
 INFO Starting jwkserve
 INFO Generating new RSA-2048 key
-INFO RSA key size: 2048 bits
+INFO Generating ECDSA P-256 key
+INFO Generating ECDSA P-384 key
+INFO Generating ECDSA P-521 key
 INFO Server listening on 0.0.0.0:3000 for issuer http://localhost:3000
-INFO Supported algorithms: [RS256]
+INFO Supported algorithms: [RS256, RS384, RS512, ES256, ES384, ES512]
 ```
 
 Now you're ready to generate valid JWT access tokens! Here's how:
@@ -102,14 +107,7 @@ $ > curl http://localhost:3000/.well-known/openid-configuration
 
 {
   "issuer": "http://localhost:3000",
-  "authorization_endpoint": "http://localhost:3000/authorize",
-  "token_endpoint": "http://localhost:3000/token",
   "jwks_uri": "http://localhost:3000/.well-known/jwks.json",
-  "response_types_supported": ["id_token", "token", "code"],
-  "subject_types_supported": ["public"],
-  "id_token_signing_alg_values_supported": ["RS256"],
-  "scopes_supported": ["openid", "profile", "email"],
-  "claims_supported": ["sub", "iss", "aud", "exp", "iat", "name", "email"]
 }
 
 # JWKS Key
@@ -129,53 +127,57 @@ $ > curl http://localhost:3000/.well-known/jwks.json
 }
 ```
 
-### Custom RSA Key
+### Custom Keys
 
-By default, `serve` generates a new temporary RSA-2048 key on startup, which takes about 2 seconds. That's fine for occasional use, but if you're restarting frequently during development, instant startup helps. For that, use a persisted key:
+By default, `serve` generates temporary keys on startup. For faster restarts during development, use persisted keys:
 
 ```bash
-# Generate key once, also available as key size 3072 and 4096
-$ > jwkserve keygen --size 2048 --output key.pem
+# Generate RSA key (sizes: 2048, 3072, 4096)
+$ > jwkserve keygen --type rsa --size 2048 --output rsa.pem
+
+# Generate ECDSA key (curves: 256, 384, 521)
+$ > jwkserve keygen --type ecdsa --curve 256 --output ecdsa.pem
 
 # Use pre-generated key (instant startup)
-$ > jwkserve serve --key key.pem
+$ > jwkserve serve --key rsa.pem
 ```
 
-For development, the test folder includes fixtures that you can use:
+For development, test fixtures are available:
 
 ```bash
 $ > jwkserve serve --key tests/fixtures/example_2048.pem
 ```
 
-### Custom Algorithm
+### Supported Algorithms
 
-When serving JWKS files, you can configure RS256, RS384, and RS512 as supported algorithms. Here's how:
+All six JWT signing algorithms are supported by default:
+
+| Algorithm | Type | Curve/Size | Endpoint |
+|-----------|------|------------|----------|
+| **RS256** | RSA | 2048-bit | `/sign` or `/sign/rsa/256` |
+| **RS384** | RSA | 2048-bit | `/sign/rsa/384` |
+| **RS512** | RSA | 2048-bit | `/sign/rsa/512` |
+| **ES256** | ECDSA | P-256 | `/sign/ecdsa/256` |
+| **ES384** | ECDSA | P-384 | `/sign/ecdsa/384` |
+| **ES512** | ECDSA | P-521 | `/sign/ecdsa/521` |
+
+By default, all algorithms are enabled and exposed in JWKS. Configure specific algorithms:
 
 ```bash
-# Use only RS256 by default
-$ > jwkserve serve
-
-# Use RS256 and RS512
-$ > jwkserve serve --algorithm RS256 --algorithm RS512
+# Enable only ES256 and ES384
+$ > jwkserve serve --algorithm ES256 --algorithm ES384
 ```
 
-The `/sign` endpoint for generating tokens supports signing algorithms as well. For flexible usage, signing is always possible using all three algorithms, regardless of what you've configured for the JWKS endpoint.
+Signing works with all algorithms regardless of JWKS configuration:
 
 ```bash
-$ > curl -X POST http://localhost:3000/sign/RS384 \
+# Sign with ECDSA P-384
+$ > curl -X POST http://localhost:3000/sign/ecdsa/384 \
     -H "Content-Type: application/json" \
-    -d '{
-        "aud": "my-app",
-        "exp": 1735689600,
-        "iat": 1704067200,
-        "nbf": 1704067200,
-        "sub": "user-12345"
-    }'
+    -d '{"sub": "user-12345", "exp": 1735689600}'
 
-{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzM4NCJ9.eyJhdWQiOiJteS1hcHAiLCJleHAiOjE3MzU2ODk2MDAsImlhdCI6MTcwNDA2NzIwMCwibmJmIjoxNzA0MDY3MjAwLCJzdWIiOiJ1c2VyLTEyMzQ1In0.signature_here"}
+{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzM4NCIsImtpZCI6Ii4uLiJ9..."}
 ```
-
-That's it! 🎉 You can now generate tokens with any of the supported algorithms.
 
 ## Build
 
