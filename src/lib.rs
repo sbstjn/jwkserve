@@ -32,7 +32,7 @@ pub enum KeySignAlgorithm {
 }
 
 impl KeySignAlgorithm {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::RS256 => "RS256",
             Self::RS384 => "RS384",
@@ -43,14 +43,14 @@ impl KeySignAlgorithm {
         }
     }
 
-    pub fn key_type(&self) -> KeyType {
+    pub const fn key_type(&self) -> KeyType {
         match self {
             Self::RS256 | Self::RS384 | Self::RS512 => KeyType::Rsa,
             Self::ES256 | Self::ES384 | Self::ES512 => KeyType::Ecdsa,
         }
     }
 
-    pub fn curve(&self) -> Option<EcdsaCurve> {
+    pub const fn curve(&self) -> Option<EcdsaCurve> {
         match self {
             Self::ES256 => Some(EcdsaCurve::P256),
             Self::ES384 => Some(EcdsaCurve::P384),

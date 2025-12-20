@@ -159,10 +159,12 @@ impl RsaPrivateKey {
         claims: &Value,
         algorithm: &KeySignAlgorithm,
     ) -> Result<String, KeyError> {
+        use KeySignAlgorithm::{RS256, RS384, RS512};
+
         let alg = match algorithm {
-            KeySignAlgorithm::RS256 => Algorithm::RS256,
-            KeySignAlgorithm::RS384 => Algorithm::RS384,
-            KeySignAlgorithm::RS512 => Algorithm::RS512,
+            RS256 => Algorithm::RS256,
+            RS384 => Algorithm::RS384,
+            RS512 => Algorithm::RS512,
             _ => {
                 return Err(KeyError::FailedToSign(
                     "unsupported algorithm for RSA key".to_string(),
@@ -225,7 +227,7 @@ pub enum EcdsaCurve {
 }
 
 impl EcdsaCurve {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::P256 => "P-256",
             Self::P384 => "P-384",
@@ -262,65 +264,45 @@ pub struct EcdsaPrivateKey {
 
 impl EcdsaPrivateKey {
     fn extract_curve_point(&self) -> (Vec<u8>, Vec<u8>) {
+        /// Extract x and y coordinates from encoded point (helper macro to eliminate duplication)
+        macro_rules! extract_point {
+            ($key:expr) => {{
+                let point = $key.verifying_key().to_encoded_point(false);
+                (
+                    point.x().unwrap().as_slice().to_vec(),
+                    point.y().unwrap().as_slice().to_vec(),
+                )
+            }};
+        }
+
         match &self.inner {
-            EcdsaKey::P256(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-            EcdsaKey::P384(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-            EcdsaKey::P521(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
+            EcdsaKey::P256(key) => extract_point!(key),
+            EcdsaKey::P384(key) => extract_point!(key),
+            EcdsaKey::P521(key) => extract_point!(key),
         }
     }
 
     pub fn generate(curve: EcdsaCurve) -> Result<Self, KeyError> {
         use elliptic_curve::pkcs8::EncodePrivateKey as EcEncodePrivateKey;
 
+        /// Generate and encode key (helper macro to eliminate duplication)
+        macro_rules! generate_key {
+            ($key_type:ty, $variant:ident, $curve:expr) => {{
+                let key = <$key_type>::generate();
+                let pem = key
+                    .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+                    .map_err(|_| KeyError::FailedToEncode {
+                        key_type: format!("ECDSA {}", $curve),
+                    })?
+                    .to_string();
+                (EcdsaKey::$variant(key), pem)
+            }};
+        }
+
         let (inner, pem_cache) = match &curve {
-            EcdsaCurve::P256 => {
-                let key = P256SigningKey::generate();
-                let pem = key
-                    .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-                    .map_err(|_| KeyError::FailedToEncode {
-                        key_type: "ECDSA P-256".to_string(),
-                    })?
-                    .to_string();
-                (EcdsaKey::P256(key), pem)
-            }
-            EcdsaCurve::P384 => {
-                let key = P384SigningKey::generate();
-                let pem = key
-                    .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-                    .map_err(|_| KeyError::FailedToEncode {
-                        key_type: "ECDSA P-384".to_string(),
-                    })?
-                    .to_string();
-                (EcdsaKey::P384(key), pem)
-            }
-            EcdsaCurve::P521 => {
-                let key = P521SigningKey::generate();
-                let pem = key
-                    .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-                    .map_err(|_| KeyError::FailedToEncode {
-                        key_type: "ECDSA P-521".to_string(),
-                    })?
-                    .to_string();
-                (EcdsaKey::P521(key), pem)
-            }
+            EcdsaCurve::P256 => generate_key!(P256SigningKey, P256, curve),
+            EcdsaCurve::P384 => generate_key!(P384SigningKey, P384, curve),
+            EcdsaCurve::P521 => generate_key!(P521SigningKey, P521, curve),
         };
 
         Ok(Self {
@@ -382,16 +364,18 @@ impl EcdsaPrivateKey {
     pub fn to_public_pem(&self) -> Result<String, KeyError> {
         use elliptic_curve::pkcs8::EncodePublicKey as EcEncodePublicKey;
 
+        /// Export public key PEM (helper macro to eliminate duplication)
+        macro_rules! export_public {
+            ($key:expr) => {
+                $key.verifying_key()
+                    .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
+            };
+        }
+
         let pem = match &self.inner {
-            EcdsaKey::P256(key) => key
-                .verifying_key()
-                .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
-            EcdsaKey::P384(key) => key
-                .verifying_key()
-                .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
-            EcdsaKey::P521(key) => key
-                .verifying_key()
-                .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
+            EcdsaKey::P256(key) => export_public!(key),
+            EcdsaKey::P384(key) => export_public!(key),
+            EcdsaKey::P521(key) => export_public!(key),
         };
 
         pem.map_err(|_| KeyError::FailedToEncode {
@@ -408,10 +392,10 @@ impl EcdsaPrivateKey {
         claims: &Value,
         algorithm: &KeySignAlgorithm,
     ) -> Result<String, KeyError> {
+        use KeySignAlgorithm::{ES256, ES384, ES512};
+
         match (&self.curve, algorithm) {
-            (EcdsaCurve::P256, KeySignAlgorithm::ES256)
-            | (EcdsaCurve::P384, KeySignAlgorithm::ES384)
-            | (EcdsaCurve::P521, KeySignAlgorithm::ES512) => {}
+            (EcdsaCurve::P256, ES256) | (EcdsaCurve::P384, ES384) | (EcdsaCurve::P521, ES512) => {}
             _ => {
                 return Err(KeyError::FailedToSign(format!(
                     "algorithm {} does not match curve {}",
@@ -420,13 +404,13 @@ impl EcdsaPrivateKey {
             }
         }
 
-        if matches!(algorithm, KeySignAlgorithm::ES512) {
+        if matches!(algorithm, ES512) {
             return self.sign_jwt_es512(claims);
         }
 
         let alg = match algorithm {
-            KeySignAlgorithm::ES256 => Algorithm::ES256,
-            KeySignAlgorithm::ES384 => Algorithm::ES384,
+            ES256 => Algorithm::ES256,
+            ES384 => Algorithm::ES384,
             _ => {
                 return Err(KeyError::FailedToSign(
                     "unsupported algorithm for ECDSA key".to_string(),

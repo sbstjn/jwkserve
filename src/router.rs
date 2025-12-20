@@ -101,18 +101,17 @@ impl ServerState {
             CryptoKey::Ecdsa(ecdsa_p521_arc.clone()),
         );
 
-        let mut jwk_keys: Vec<Value> = Vec::new();
-        for alg in &algorithms {
-            let jwk = match alg {
+        let jwk_keys: Vec<Value> = algorithms
+            .iter()
+            .map(|alg| match alg {
                 KeySignAlgorithm::RS256 | KeySignAlgorithm::RS384 | KeySignAlgorithm::RS512 => {
                     rsa_key_arc.to_jwk(alg)
                 }
                 KeySignAlgorithm::ES256 => ecdsa_p256_arc.to_jwk(alg),
                 KeySignAlgorithm::ES384 => ecdsa_p384_arc.to_jwk(alg),
                 KeySignAlgorithm::ES512 => ecdsa_p521_arc.to_jwk(alg),
-            };
-            jwk_keys.push(jwk);
-        }
+            })
+            .collect();
 
         let jwks_response = Arc::new(json!({
             "keys": jwk_keys
