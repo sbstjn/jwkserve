@@ -252,10 +252,10 @@ jobs:
           docker build \
             --platform linux/amd64 \
             -f Dockerfile . \
-            -t rg.fr-par.scw.cloud/funcscwjwkservey7lpl8qx/jwkserve:latest
+            -t ${{ secrets.JWKSERVE_REPOSITORY }}/jwkserve:latest
 
       - name: Push to Scaleway Container Registry
-        run: docker push rg.fr-par.scw.cloud/funcscwjwkservey7lpl8qx/jwkserve:latest
+        run: docker push ${{ secrets.JWKSERVE_REPOSITORY }}/jwkserve:latest
 
       - name: Install Scaleway CLI
         run: curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
@@ -266,4 +266,4 @@ jobs:
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
           SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
           SCW_DEFAULT_REGION: fr-par
-        run: scw container container deploy 16513618-be5b-4ecc-a663-474685c62d7e
+        run: scw container container deploy ${{ secrets.JWKSERVE_CONTAINER_ID }}
