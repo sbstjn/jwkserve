@@ -2,12 +2,12 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::key::RsaKeyError;
+use crate::key::KeyError;
 
 #[derive(Error, Debug)]
 pub enum JWKServeError {
-    #[error("RSA key error: {0}")]
-    RsaKeyError(#[from] RsaKeyError),
+    #[error("key error: {0}")]
+    KeyError(#[from] KeyError),
 
     #[error("file already exists: {path}")]
     FileExists { path: PathBuf },

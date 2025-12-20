@@ -16,12 +16,12 @@ pub struct ArgsShow {
 }
 
 pub async fn handle_show(args: &ArgsShow) -> color_eyre::Result<()> {
-    let key = RsaPrivateKey::from_pem_file(&args.key_file).map_err(JWKServeError::RsaKeyError)?;
+    let key = RsaPrivateKey::from_pem_file(&args.key_file).map_err(JWKServeError::KeyError)?;
 
     let output = if args.public {
-        key.to_public_pem().map_err(JWKServeError::RsaKeyError)?
+        key.to_public_pem().map_err(JWKServeError::KeyError)?
     } else {
-        key.to_pem().map_err(JWKServeError::RsaKeyError)?
+        key.to_pem().map_err(JWKServeError::KeyError)?
     };
 
     println!("{output}");

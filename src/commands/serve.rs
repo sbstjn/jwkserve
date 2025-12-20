@@ -115,10 +115,10 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
 
     let key: RsaPrivateKey = if let Some(key_file) = &args.key_file {
         info!("Loading RSA key from file: {:?}", key_file);
-        RsaPrivateKey::from_pem_file(key_file).map_err(JWKServeError::RsaKeyError)?
+        RsaPrivateKey::from_pem_file(key_file).map_err(JWKServeError::KeyError)?
     } else {
         info!("Generating new RSA-2048 key");
-        RsaPrivateKey::generate(2048).map_err(JWKServeError::RsaKeyError)?
+        RsaPrivateKey::generate(2048).map_err(JWKServeError::KeyError)?
     };
 
     info!("RSA key size: {} bits", key.size_bits());
