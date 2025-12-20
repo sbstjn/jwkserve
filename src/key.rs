@@ -79,19 +79,13 @@ pub enum KeyError {
     FailedToSign(String),
 }
 
-/// RSA private key for JWT signing operations
 #[derive(Clone, Debug)]
 pub struct RsaPrivateKey {
     inner: rsa::RsaPrivateKey,
-    /// Cached PEM encoding for signing operations
     pem_cache: String,
 }
 
 impl RsaPrivateKey {
-    /// Generate a new RSA private key with the specified bit size
-    ///
-    /// # Arguments
-    /// * `bits` - Key size in bits (must be 2048, 3072, or 4096)
     pub fn generate(bits: usize) -> Result<Self, KeyError> {
         if bits != 2048 && bits != 3072 && bits != 4096 {
             return Err(KeyError::InvalidKeySize {
@@ -117,9 +111,6 @@ impl RsaPrivateKey {
         Ok(Self { inner, pem_cache })
     }
 
-    /// Load RSA private key from PEM-encoded string
-    ///
-    /// Validates PEM string length to prevent resource exhaustion (max 64KB)
     pub fn from_pem(pem: &str) -> Result<Self, KeyError> {
         validate_pem_size(pem)?;
 
@@ -134,9 +125,6 @@ impl RsaPrivateKey {
         })
     }
 
-    /// Load RSA private key from PEM file
-    ///
-    /// Validates file size to prevent resource exhaustion (max 64KB for PEM keys)
     pub fn from_pem_file(path: &Path) -> Result<Self, KeyError> {
         validate_file_size(path)?;
 
@@ -148,12 +136,10 @@ impl RsaPrivateKey {
         Self::from_pem(&pem)
     }
 
-    /// Export RSA private key to PEM format (PKCS#8)
     pub fn to_pem(&self) -> Result<String, KeyError> {
         Ok(self.pem_cache.clone())
     }
 
-    /// Export RSA public key to PEM format (PKCS#8)
     pub fn to_public_pem(&self) -> Result<String, KeyError> {
         let public_key = RsaPublicKey::from(&self.inner);
 
@@ -164,19 +150,10 @@ impl RsaPrivateKey {
             })
     }
 
-    /// Get the key size in bits
     pub fn size_bits(&self) -> usize {
         self.inner.n().bits()
     }
 
-    /// Sign arbitrary JWT claims with the specified algorithm
-    ///
-    /// # Arguments
-    /// * `claims` - JSON value containing the JWT claims
-    /// * `algorithm` - The signing algorithm to use
-    ///
-    /// # Returns
-    /// The signed JWT token as a string
     pub fn sign_jwt(
         &self,
         claims: &Value,
@@ -193,11 +170,9 @@ impl RsaPrivateKey {
             }
         };
 
-        // Use cached PEM encoding for efficiency
         let encoding_key = EncodingKey::from_rsa_pem(self.pem_cache.as_bytes())
             .map_err(|e| KeyError::FailedToSign(e.to_string()))?;
 
-        // Calculate kid to match JWK - must be identical to to_jwk() output
         let kid = self.calculate_kid(algorithm);
 
         let mut header = Header::new(alg);
@@ -206,10 +181,6 @@ impl RsaPrivateKey {
         encode(&header, claims, &encoding_key).map_err(|e| KeyError::FailedToSign(e.to_string()))
     }
 
-    /// Calculate Key ID (kid) for a given algorithm
-    ///
-    /// The kid is calculated as SHA-256 thumbprint per RFC 7638,
-    /// suffixed with the algorithm to support multiple algorithms per key.
     fn calculate_kid(&self, alg: &KeySignAlgorithm) -> String {
         let n = self.inner.n().to_bytes_be();
         let e = self.inner.e().to_bytes_be();
@@ -217,7 +188,6 @@ impl RsaPrivateKey {
         let n_b64 = URL_SAFE_NO_PAD.encode(&n);
         let e_b64 = URL_SAFE_NO_PAD.encode(&e);
 
-        // RFC 7638: SHA-256 of lexicographically ordered required members
         let thumbprint_input = format!(r#"{{"e":"{e_b64}","kty":"RSA","n":"{n_b64}"}}"#);
         let mut hasher = Sha256::new();
         hasher.update(thumbprint_input.as_bytes());
@@ -227,13 +197,6 @@ impl RsaPrivateKey {
         format!("{}-{}", kid_base, alg.as_str())
     }
 
-    /// Export RSA public key as JSON Web Key (JWK)
-    ///
-    /// Returns a JWK representation according to RFC 7517 and RFC 7518.
-    /// The Key ID (kid) is calculated as a SHA-256 thumbprint per RFC 7638.
-    ///
-    /// # Arguments
-    /// * `alg` - The signing algorithm
     pub fn to_jwk(&self, alg: &KeySignAlgorithm) -> Value {
         let n = self.inner.n().to_bytes_be();
         let e = self.inner.e().to_bytes_be();
@@ -254,7 +217,6 @@ impl RsaPrivateKey {
     }
 }
 
-/// Supported ECDSA curves
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum EcdsaCurve {
     P256,
@@ -272,7 +234,6 @@ impl EcdsaCurve {
     }
 }
 
-/// ECDSA private key wrapper supporting multiple curves
 #[derive(Clone, Debug)]
 enum EcdsaKey {
     P256(P256SigningKey),
@@ -280,19 +241,14 @@ enum EcdsaKey {
     P521(P521SigningKey),
 }
 
-/// ECDSA private key for JWT signing operations
 #[derive(Clone, Debug)]
 pub struct EcdsaPrivateKey {
     inner: EcdsaKey,
     curve: EcdsaCurve,
-    /// Cached PEM encoding for signing operations
     pem_cache: String,
 }
 
 impl EcdsaPrivateKey {
-    /// Extract curve point coordinates (x, y) from the public key
-    ///
-    /// Returns the uncompressed point coordinates as byte vectors
     fn extract_curve_point(&self) -> (Vec<u8>, Vec<u8>) {
         match &self.inner {
             EcdsaKey::P256(key) => {
@@ -319,10 +275,6 @@ impl EcdsaPrivateKey {
         }
     }
 
-    /// Generate a new ECDSA private key with the specified curve
-    ///
-    /// # Arguments
-    /// * `curve` - The elliptic curve to use (P-256, P-384, or P-521)
     pub fn generate(curve: EcdsaCurve) -> Result<Self, KeyError> {
         use elliptic_curve::pkcs8::EncodePrivateKey as EcEncodePrivateKey;
 
@@ -366,16 +318,11 @@ impl EcdsaPrivateKey {
         })
     }
 
-    /// Load ECDSA private key from PEM-encoded string
-    ///
-    /// Validates PEM string length to prevent resource exhaustion (max 64KB)
-    /// Automatically detects the curve from the key
     pub fn from_pem(pem: &str) -> Result<Self, KeyError> {
         use elliptic_curve::pkcs8::DecodePrivateKey as EcDecodePrivateKey;
 
         validate_pem_size(pem)?;
 
-        // Try each curve type
         if let Ok(key) = P256SigningKey::from_pkcs8_pem(pem) {
             return Ok(Self {
                 inner: EcdsaKey::P256(key),
@@ -405,9 +352,6 @@ impl EcdsaPrivateKey {
         })
     }
 
-    /// Load ECDSA private key from PEM file
-    ///
-    /// Validates file size to prevent resource exhaustion (max 64KB for PEM keys)
     pub fn from_pem_file(path: &Path) -> Result<Self, KeyError> {
         validate_file_size(path)?;
 
@@ -419,12 +363,10 @@ impl EcdsaPrivateKey {
         Self::from_pem(&pem)
     }
 
-    /// Export ECDSA private key to PEM format (PKCS#8)
     pub fn to_pem(&self) -> Result<String, KeyError> {
         Ok(self.pem_cache.clone())
     }
 
-    /// Export ECDSA public key to PEM format (PKCS#8)
     pub fn to_public_pem(&self) -> Result<String, KeyError> {
         use elliptic_curve::pkcs8::EncodePublicKey as EcEncodePublicKey;
 
@@ -445,25 +387,15 @@ impl EcdsaPrivateKey {
         })
     }
 
-    /// Get the curve name
     pub fn curve(&self) -> &EcdsaCurve {
         &self.curve
     }
 
-    /// Sign arbitrary JWT claims with the specified algorithm
-    ///
-    /// # Arguments
-    /// * `claims` - JSON value containing the JWT claims
-    /// * `algorithm` - The signing algorithm to use (must match the curve)
-    ///
-    /// # Returns
-    /// The signed JWT token as a string
     pub fn sign_jwt(
         &self,
         claims: &Value,
         algorithm: &KeySignAlgorithm,
     ) -> Result<String, KeyError> {
-        // Validate algorithm matches curve
         match (&self.curve, algorithm) {
             (EcdsaCurve::P256, KeySignAlgorithm::ES256)
             | (EcdsaCurve::P384, KeySignAlgorithm::ES384)
@@ -477,7 +409,6 @@ impl EcdsaPrivateKey {
             }
         }
 
-        // ES512 requires manual implementation as jsonwebtoken doesn't support it
         if matches!(algorithm, KeySignAlgorithm::ES512) {
             return self.sign_jwt_es512(claims);
         }
@@ -492,11 +423,9 @@ impl EcdsaPrivateKey {
             }
         };
 
-        // Use cached PEM encoding for efficiency
         let encoding_key = EncodingKey::from_ec_pem(self.pem_cache.as_bytes())
             .map_err(|e| KeyError::FailedToSign(e.to_string()))?;
 
-        // Calculate kid to match JWK - must be identical to to_jwk() output
         let kid = self.calculate_kid(algorithm);
 
         let mut header = Header::new(alg);
@@ -505,21 +434,15 @@ impl EcdsaPrivateKey {
         encode(&header, claims, &encoding_key).map_err(|e| KeyError::FailedToSign(e.to_string()))
     }
 
-    /// Manual JWT signing implementation for ES512 (P-521)
-    ///
-    /// Required because jsonwebtoken crate doesn't support ES512.
-    /// Implements JWT signing per RFC 7519 with ES512 algorithm (RFC 7518).
     fn sign_jwt_es512(&self, claims: &Value) -> Result<String, KeyError> {
         let kid = self.calculate_kid(&KeySignAlgorithm::ES512);
 
-        // Construct JWT header
         let header = json!({
             "alg": "ES512",
             "typ": "JWT",
             "kid": kid
         });
 
-        // Base64url encode header and payload
         let header_json = serde_json::to_string(&header)
             .map_err(|e| KeyError::FailedToSign(format!("header serialization: {}", e)))?;
         let claims_json = serde_json::to_string(&claims)
@@ -528,15 +451,12 @@ impl EcdsaPrivateKey {
         let header_b64 = URL_SAFE_NO_PAD.encode(header_json.as_bytes());
         let claims_b64 = URL_SAFE_NO_PAD.encode(claims_json.as_bytes());
 
-        // Create signing input: header.payload
         let signing_input = format!("{}.{}", header_b64, claims_b64);
 
-        // Hash the signing input with SHA-512 (per ES512 spec)
         let mut hasher = Sha512::new();
         hasher.update(signing_input.as_bytes());
         let message_hash = hasher.finalize();
 
-        // Sign using P-521 key
         let signature: P521Signature = match &self.inner {
             EcdsaKey::P521(key) => key.sign(&message_hash),
             _ => {
@@ -546,17 +466,11 @@ impl EcdsaPrivateKey {
             }
         };
 
-        // Encode signature in base64url
         let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
 
-        // Construct final JWT: header.payload.signature
         Ok(format!("{}.{}", signing_input, signature_b64))
     }
 
-    /// Calculate Key ID (kid) for a given algorithm
-    ///
-    /// The kid is calculated as SHA-256 thumbprint per RFC 7638,
-    /// suffixed with the algorithm to support multiple algorithms per key.
     fn calculate_kid(&self, alg: &KeySignAlgorithm) -> String {
         let (x_bytes, y_bytes) = self.extract_curve_point();
 
@@ -564,7 +478,6 @@ impl EcdsaPrivateKey {
         let y_b64 = URL_SAFE_NO_PAD.encode(&y_bytes);
         let crv = self.curve.as_str();
 
-        // RFC 7638: SHA-256 of lexicographically ordered required members
         let thumbprint_input =
             format!(r#"{{"crv":"{crv}","kty":"EC","x":"{x_b64}","y":"{y_b64}"}}"#);
         let mut hasher = Sha256::new();
@@ -575,13 +488,6 @@ impl EcdsaPrivateKey {
         format!("{}-{}", kid_base, alg.as_str())
     }
 
-    /// Export ECDSA public key as JSON Web Key (JWK)
-    ///
-    /// Returns a JWK representation according to RFC 7517 and RFC 7518.
-    /// The Key ID (kid) is calculated as a SHA-256 thumbprint per RFC 7638.
-    ///
-    /// # Arguments
-    /// * `alg` - The signing algorithm
     pub fn to_jwk(&self, alg: &KeySignAlgorithm) -> Value {
         let (x_bytes, y_bytes) = self.extract_curve_point();
 

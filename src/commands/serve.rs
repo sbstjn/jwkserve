@@ -14,28 +14,22 @@ use crate::{
 
 #[derive(Args)]
 pub struct ArgsServe {
-    /// Port to listen on
     #[arg(short, long, default_value = "3000", value_name = "PORT")]
     pub port: u16,
 
-    /// Bind address (use 0.0.0.0 for Docker, 127.0.0.1 for local)
     #[arg(short, long, default_value = "127.0.0.1", value_name = "ADDR")]
     pub bind: String,
 
-    /// Issuer URL (auto-generated from bind address and port if not provided)
     #[arg(short, long, value_name = "URL")]
     pub issuer: Option<String>,
 
-    /// Supported signing algorithms (can be used multiple times, default: RS256)
     #[arg(short, long = "algorithm", value_enum, value_name = "ALG")]
     pub algorithms: Vec<KeySignAlgorithm>,
 
-    /// Path to PEM-encoded private key file(s) - can be specified multiple times for different key types (RSA, ECDSA P-256, P-384, P-521). Keys are auto-detected. Missing key types are generated.
     #[arg(short, long = "key", value_name = "FILE")]
     pub key_files: Vec<PathBuf>,
 }
 
-/// Generate issuer URL from bind address and port
 fn generate_issuer(bind: &IpAddr, port: u16) -> String {
     let host = if bind.is_unspecified() {
         "localhost"
@@ -48,39 +42,33 @@ fn generate_issuer(bind: &IpAddr, port: u16) -> String {
     format!("http://{host}:{port}")
 }
 
-/// Validate issuer URL format using proper URL parser
 fn validate_issuer_url(url_str: &str) -> color_eyre::Result<()> {
     if url_str.is_empty() {
         return Err(color_eyre::eyre::eyre!("issuer URL cannot be empty"));
     }
 
-    // Length validation to prevent resource exhaustion
     if url_str.len() > 2048 {
         return Err(color_eyre::eyre::eyre!(
             "issuer URL exceeds maximum length of 2048 characters"
         ));
     }
 
-    // Parse URL to validate structure
     let url = url_str
         .parse::<url::Url>()
         .map_err(|e| color_eyre::eyre::eyre!("invalid issuer URL: {}", e))?;
 
-    // Must use http or https scheme
     if url.scheme() != "http" && url.scheme() != "https" {
         return Err(color_eyre::eyre::eyre!(
             "issuer URL must use http or https scheme"
         ));
     }
 
-    // Must not end with trailing slash (per OIDC spec)
     if url_str.ends_with('/') {
         return Err(color_eyre::eyre::eyre!(
             "issuer URL must not end with trailing slash"
         ));
     }
 
-    // Must have a host
     if url.host_str().is_none() {
         return Err(color_eyre::eyre::eyre!("issuer URL must have a valid host"));
     }
@@ -88,22 +76,16 @@ fn validate_issuer_url(url_str: &str) -> color_eyre::Result<()> {
     Ok(())
 }
 
-/// Validate bind address format
 fn validate_bind_address(addr: &str) -> color_eyre::Result<IpAddr> {
     addr.parse::<IpAddr>()
         .map_err(|_| color_eyre::eyre::eyre!("invalid bind address: {}", addr))
 }
 
-/// Collection of loaded cryptographic keys
 struct KeyCollection {
     rsa: Option<RsaPrivateKey>,
     ecdsa: HashMap<EcdsaCurve, EcdsaPrivateKey>,
 }
 
-/// Load keys from provided file paths and auto-detect their types
-///
-/// Attempts to parse each key as RSA first, then tries ECDSA curves.
-/// Returns an error if a key cannot be parsed or if duplicate keys of the same type are found.
 fn load_keys(paths: &[PathBuf]) -> color_eyre::Result<KeyCollection> {
     let mut collection = KeyCollection {
         rsa: None,
@@ -111,7 +93,6 @@ fn load_keys(paths: &[PathBuf]) -> color_eyre::Result<KeyCollection> {
     };
 
     for path in paths {
-        // Try RSA first
         if let Ok(key) = RsaPrivateKey::from_pem_file(path) {
             info!("Loaded RSA key from {:?} ({} bits)", path, key.size_bits());
             if collection.rsa.is_some() {
@@ -123,7 +104,6 @@ fn load_keys(paths: &[PathBuf]) -> color_eyre::Result<KeyCollection> {
             continue;
         }
 
-        // Try ECDSA keys
         if let Ok(key) = EcdsaPrivateKey::from_pem_file(path) {
             let curve = key.curve().clone();
             info!("Loaded ECDSA {} key from {:?}", curve.as_str(), path);
@@ -139,7 +119,6 @@ fn load_keys(paths: &[PathBuf]) -> color_eyre::Result<KeyCollection> {
             continue;
         }
 
-        // If we get here, the key couldn't be parsed
         return Err(color_eyre::eyre::eyre!(
             "Failed to load key from {:?}: not a valid RSA or ECDSA (P-256, P-384, P-521) key",
             path
@@ -152,10 +131,8 @@ fn load_keys(paths: &[PathBuf]) -> color_eyre::Result<KeyCollection> {
 pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
     info!("Starting jwkserve");
 
-    // Validate bind address
     let bind_ip = validate_bind_address(&args.bind)?;
 
-    // Determine issuer (use provided or auto-generate)
     let issuer = if let Some(ref issuer_url) = args.issuer {
         validate_issuer_url(issuer_url)?;
         issuer_url.clone()
@@ -176,10 +153,8 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
         &args.algorithms[..]
     };
 
-    // Load keys from files and auto-detect their types
     let mut collection = load_keys(&args.key_files)?;
 
-    // Determine which keys to log based on configured algorithms
     use crate::KeyType;
     let log_rsa = algorithms.iter().any(|alg| alg.key_type() == KeyType::Rsa);
     let log_p256 = algorithms
@@ -192,7 +167,6 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
         .iter()
         .any(|alg| alg.curve() == Some(EcdsaCurve::P521));
 
-    // Always generate all keys (needed for signing flexibility), but only log configured ones
     let rsa_key = if let Some(key) = collection.rsa.take() {
         key
     } else {

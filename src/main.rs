@@ -37,7 +37,6 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    // Initialize color-eyre for better error reporting
     color_eyre::install()?;
 
     tracing_subscriber::fmt()

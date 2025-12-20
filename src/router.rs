@@ -38,7 +38,6 @@ pub enum CryptoKey {
 }
 
 impl CryptoKey {
-    /// Sign JWT claims with this key using the specified algorithm
     fn sign_jwt(
         &self,
         claims: &Value,
@@ -51,29 +50,18 @@ impl CryptoKey {
     }
 }
 
-/// Shared application state containing server configuration and cryptographic keys
-///
-/// All fields use Arc to minimize cloning overhead in Axum's State extractor,
-/// which clones the state for each request handler.
 #[derive(Clone)]
 pub struct ServerState {
-    /// Base issuer URL for OpenID configuration
     pub issuer: Arc<str>,
-    /// Supported JWT signing algorithms
     pub algorithms: Arc<[KeySignAlgorithm]>,
-    /// Unified key storage: algorithm -> key mapping
     keys: Arc<HashMap<KeySignAlgorithm, CryptoKey>>,
-    /// Cached OpenID discovery response
     openid_config: Arc<Value>,
-    /// Cached JWKS response
     jwks_response: Arc<Value>,
-    /// Cached rendered HTML template (non-headless only)
     #[cfg(not(feature = "headless"))]
     cached_html: Arc<str>,
 }
 
 impl ServerState {
-    /// Create new server state with the provided configuration
     pub fn new(
         issuer: String,
         algorithms: Vec<KeySignAlgorithm>,
@@ -85,16 +73,13 @@ impl ServerState {
         let issuer: Arc<str> = Arc::from(issuer.as_str());
         let jwks_uri = format!("{}/.well-known/jwks.json", issuer);
 
-        // Store all keys (needed for signing with any algorithm)
         let rsa_key_arc = Arc::new(rsa_key);
         let ecdsa_p256_arc = Arc::new(ecdsa_p256_key);
         let ecdsa_p384_arc = Arc::new(ecdsa_p384_key);
         let ecdsa_p521_arc = Arc::new(ecdsa_p521_key);
 
-        // Build key storage for ALL algorithms (signing flexibility for testing)
         let mut key_map: HashMap<KeySignAlgorithm, CryptoKey> = HashMap::new();
 
-        // Map RSA algorithms
         for alg in [
             KeySignAlgorithm::RS256,
             KeySignAlgorithm::RS384,
@@ -103,7 +88,6 @@ impl ServerState {
             key_map.insert(alg, CryptoKey::Rsa(rsa_key_arc.clone()));
         }
 
-        // Map ECDSA algorithms
         key_map.insert(
             KeySignAlgorithm::ES256,
             CryptoKey::Ecdsa(ecdsa_p256_arc.clone()),
@@ -117,7 +101,6 @@ impl ServerState {
             CryptoKey::Ecdsa(ecdsa_p521_arc.clone()),
         );
 
-        // Pre-compute JWKS response from configured algorithms only
         let mut jwk_keys: Vec<Value> = Vec::new();
         for alg in &algorithms {
             let jwk = match alg {
@@ -135,13 +118,11 @@ impl ServerState {
             "keys": jwk_keys
         }));
 
-        // Pre-compute OpenID configuration
         let openid_config = Arc::new(json!({
             "issuer": issuer.as_ref(),
             "jwks_uri": jwks_uri,
         }));
 
-        // Pre-render HTML template to avoid allocation on every request
         #[cfg(not(feature = "headless"))]
         let cached_html = {
             const TEMPLATE: &str = include_str!("../website/index.html");
@@ -163,25 +144,18 @@ impl ServerState {
         }
     }
 
-    /// Get the key for a specific algorithm
-    ///
-    /// Returns the key even if the algorithm is not in the configured algorithms list.
-    /// This allows signing with any algorithm while only exposing configured ones in JWKS.
     fn get_key(&self, algorithm: &KeySignAlgorithm) -> Option<&CryptoKey> {
         self.keys.get(algorithm)
     }
 }
 
-/// Response for the /sign endpoint
 #[derive(Serialize)]
 pub struct SignResponse {
     token: String,
 }
 
-/// Build the application router with all endpoints and middleware
 pub fn build_router(state: ServerState) -> Router {
-    // Set maximum request body size to 1MB to prevent resource exhaustion
-    const MAX_BODY_SIZE: usize = 1024 * 1024; // 1MB
+    const MAX_BODY_SIZE: usize = 1024 * 1024;
 
     let router = Router::new()
         .route("/", get(root))
@@ -231,23 +205,18 @@ pub fn build_router(state: ServerState) -> Router {
         .with_state(state)
 }
 
-/// Root endpoint serving the web UI or health check
 #[cfg(feature = "headless")]
 async fn root() -> &'static str {
     "OK"
 }
 
-/// Root endpoint serving the web UI
 #[cfg(not(feature = "headless"))]
 async fn root(State(state): State<ServerState>) -> Html<String> {
-    // Arc clone is cheap (just ref count increment), then convert to String for response
     Html(state.cached_html.to_string())
 }
 
-/// Serve static files from the embedded website directory
 #[cfg(not(feature = "headless"))]
 async fn serve_static(Path(path): Path<String>) -> Response {
-    // Remove leading slash for directory lookup
     let path = path.trim_start_matches('/');
 
     match WEBSITE_DIR.get_file(path) {
@@ -266,7 +235,6 @@ async fn serve_static(Path(path): Path<String>) -> Response {
     }
 }
 
-/// Determine MIME type based on file extension
 #[cfg(not(feature = "headless"))]
 fn get_mime_type(path: &str) -> &'static str {
     if path.ends_with(".html") {
@@ -334,21 +302,6 @@ async fn sign_default(State(state): State<ServerState>, Json(claims): Json<Value
     sign_with_algorithm(state, KeySignAlgorithm::RS256, claims).await
 }
 
-/// JWT signing endpoint with RSA key
-///
-/// Accepts arbitrary JSON claims and returns a signed JWT using RSA with the specified key size.
-///
-/// # Path Parameters
-/// * `size` - Key size (256, 384, or 512 for RS256, RS384, RS512)
-///
-/// # Request Body
-/// Any valid JSON object representing JWT claims
-///
-/// # Example
-/// ```text
-/// POST /sign/rsa/256
-/// {"sub": "user123", "aud": "my-app"}
-/// ```
 async fn sign_rsa(
     State(state): State<ServerState>,
     Path(size): Path<String>,
@@ -372,21 +325,6 @@ async fn sign_rsa(
     sign_with_algorithm(state, algorithm, claims).await
 }
 
-/// JWT signing endpoint with ECDSA key
-///
-/// Accepts arbitrary JSON claims and returns a signed JWT using ECDSA with the specified curve.
-///
-/// # Path Parameters
-/// * `size` - Curve size (256 for P-256/ES256, 384 for P-384/ES384, 521 for P-521/ES512)
-///
-/// # Request Body
-/// Any valid JSON object representing JWT claims
-///
-/// # Example
-/// ```text
-/// POST /sign/ecdsa/521
-/// {"sub": "user123", "aud": "my-app"}
-/// ```
 async fn sign_ecdsa(
     State(state): State<ServerState>,
     Path(size): Path<String>,
@@ -410,33 +348,21 @@ async fn sign_ecdsa(
     sign_with_algorithm(state, algorithm, claims).await
 }
 
-/// Internal signing logic shared by all signing endpoints
-///
-/// Note: This endpoint supports ALL algorithms (RS256-512, ES256-512) regardless
-/// of server configuration. The --algorithm flag only controls which keys are
-/// exposed in the JWKS endpoint, allowing you to test JWT validation scenarios
-/// where the signing algorithm is not advertised in the key set.
-///
-/// If the claims do not include an 'iss' field, it will be automatically injected
-/// from the server's issuer configuration.
 async fn sign_with_algorithm(
     state: ServerState,
     algorithm: KeySignAlgorithm,
     mut claims: Value,
 ) -> Response {
-    // Inject 'iss' claim if not present
     if let Some(claims_obj) = claims.as_object_mut() {
         if !claims_obj.contains_key("iss") {
             claims_obj.insert("iss".to_string(), json!(state.issuer.as_ref()));
         }
     }
 
-    // Get the key for this algorithm (all algorithms are always available)
     let key = state
         .get_key(&algorithm)
         .expect("all algorithms should have keys");
 
-    // Sign the JWT with the key
     let result = key.sign_jwt(&claims, &algorithm);
 
     match result {

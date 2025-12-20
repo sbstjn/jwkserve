@@ -41,7 +41,6 @@ impl KeySignAlgorithm {
         }
     }
 
-    /// Get the key type required for this algorithm
     pub fn key_type(&self) -> KeyType {
         match self {
             Self::RS256 | Self::RS384 | Self::RS512 => KeyType::Rsa,
@@ -49,9 +48,6 @@ impl KeySignAlgorithm {
         }
     }
 
-    /// Get the ECDSA curve for this algorithm (if applicable)
-    ///
-    /// Returns None for RSA algorithms
     pub fn curve(&self) -> Option<EcdsaCurve> {
         match self {
             Self::ES256 => Some(EcdsaCurve::P256),
