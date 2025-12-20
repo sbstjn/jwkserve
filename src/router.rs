@@ -162,8 +162,7 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/.well-known/openid-configuration", get(openid_discovery))
         .route("/.well-known/jwks.json", get(jwks))
         .route("/sign", post(sign_default))
-        .route("/sign/rsa/{size}", post(sign_rsa))
-        .route("/sign/ecdsa/{size}", post(sign_ecdsa));
+        .route("/sign/{algorithm}", post(sign_algorithm));
 
     #[cfg(not(feature = "headless"))]
     let router = router.route("/{*path}", get(serve_static));
@@ -302,50 +301,42 @@ async fn sign_default(State(state): State<ServerState>, Json(claims): Json<Value
     sign_with_algorithm(state, KeySignAlgorithm::RS256, claims).await
 }
 
-async fn sign_rsa(
+/// JWT signing endpoint with explicit algorithm
+///
+/// Accepts arbitrary JSON claims and returns a signed JWT using the specified algorithm.
+/// Uses standard JWT algorithm names (RS256, RS384, RS512, ES256, ES384, ES512).
+///
+/// # Path Parameters
+/// * `algorithm` - JWT algorithm name (case-insensitive)
+///
+/// # Request Body
+/// Any valid JSON object representing JWT claims
+///
+/// # Examples
+/// ```text
+/// POST /sign/RS256
+/// {"sub": "user123", "aud": "my-app"}
+///
+/// POST /sign/ES384
+/// {"sub": "user123", "aud": "my-app", "exp": 1735689600}
+/// ```
+async fn sign_algorithm(
     State(state): State<ServerState>,
-    Path(size): Path<String>,
+    Path(algorithm_str): Path<String>,
     Json(claims): Json<Value>,
 ) -> Response {
-    let algorithm = match size.as_str() {
-        "256" => KeySignAlgorithm::RS256,
-        "384" => KeySignAlgorithm::RS384,
-        "512" => KeySignAlgorithm::RS512,
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": format!("invalid RSA size: {size}. Valid sizes: 256, 384, 512")
-                })),
-            )
-                .into_response();
-        }
-    };
+    use std::str::FromStr;
 
-    sign_with_algorithm(state, algorithm, claims).await
-}
-
-async fn sign_ecdsa(
-    State(state): State<ServerState>,
-    Path(size): Path<String>,
-    Json(claims): Json<Value>,
-) -> Response {
-    let algorithm = match size.as_str() {
-        "256" => KeySignAlgorithm::ES256,
-        "384" => KeySignAlgorithm::ES384,
-        "521" => KeySignAlgorithm::ES512,
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": format!("invalid ECDSA curve size: {size}. Valid sizes: 256, 384, 521")
-                })),
-            )
-                .into_response();
-        }
-    };
-
-    sign_with_algorithm(state, algorithm, claims).await
+    match KeySignAlgorithm::from_str(&algorithm_str) {
+        Ok(algorithm) => sign_with_algorithm(state, algorithm, claims).await,
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": err
+            })),
+        )
+            .into_response(),
+    }
 }
 
 async fn sign_with_algorithm(

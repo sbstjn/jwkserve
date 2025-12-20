@@ -151,23 +151,16 @@ impl TestServer {
     }
 
     /// Sign a JWT with the specified claims and algorithm
+    ///
+    /// Uses the standard JWT algorithm names (RS256, ES384, etc.) directly in the URL.
     pub async fn sign_jwt(
         &self,
         claims: serde_json::Value,
         algorithm: Option<&str>,
     ) -> color_eyre::Result<String> {
         let url = if let Some(alg) = algorithm {
-            // Map old algorithm format to new endpoint structure
-            let path = match alg.to_uppercase().as_str() {
-                "RS256" => "sign/rsa/256",
-                "RS384" => "sign/rsa/384",
-                "RS512" => "sign/rsa/512",
-                "ES256" => "sign/ecdsa/256",
-                "ES384" => "sign/ecdsa/384",
-                "ES512" => "sign/ecdsa/521",
-                _ => return Err(color_eyre::eyre::eyre!("Unknown algorithm: {}", alg)),
-            };
-            format!("{}/{}", self.base_url, path)
+            // Use algorithm name directly in URL path
+            format!("{}/sign/{}", self.base_url, alg.to_uppercase())
         } else {
             format!("{}/sign", self.base_url)
         };

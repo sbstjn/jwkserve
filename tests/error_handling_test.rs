@@ -59,7 +59,7 @@ async fn test_malformed_json_rejected() {
 }
 
 #[tokio::test]
-async fn test_invalid_rsa_size_rejected() {
+async fn test_invalid_algorithm_rejected() {
     let server = TestServer::spawn(2048, vec![KeySignAlgorithm::RS256])
         .await
         .expect("Failed to spawn server");
@@ -67,9 +67,9 @@ async fn test_invalid_rsa_size_rejected() {
     let claims = json!({"sub": "user", "exp": 9999999999_i64});
     let client = reqwest::Client::new();
 
-    // Try to sign with invalid RSA size
+    // Try to sign with invalid algorithm
     let response = client
-        .post(format!("{}/sign/rsa/999", server.base_url))
+        .post(format!("{}/sign/INVALID", server.base_url))
         .json(&claims)
         .send()
         .await
@@ -78,7 +78,7 @@ async fn test_invalid_rsa_size_rejected() {
     assert_eq!(
         response.status(),
         reqwest::StatusCode::BAD_REQUEST,
-        "Should return 400 for invalid RSA size"
+        "Should return 400 for invalid algorithm"
     );
 
     let error_response: serde_json::Value = response.json().await.expect("Failed to parse error");
@@ -87,13 +87,13 @@ async fn test_invalid_rsa_size_rejected() {
             .get("error")
             .and_then(|e| e.as_str())
             .unwrap_or("")
-            .contains("invalid RSA size"),
-        "Error message should mention invalid RSA size"
+            .contains("is not supported"),
+        "Error message should mention unsupported algorithm"
     );
 }
 
 #[tokio::test]
-async fn test_invalid_ecdsa_curve_rejected() {
+async fn test_none_algorithm_rejected() {
     let server = TestServer::spawn(2048, vec![KeySignAlgorithm::ES256])
         .await
         .expect("Failed to spawn server");
@@ -101,9 +101,9 @@ async fn test_invalid_ecdsa_curve_rejected() {
     let claims = json!({"sub": "user", "exp": 9999999999_i64});
     let client = reqwest::Client::new();
 
-    // Try to sign with invalid ECDSA curve size
+    // Try to sign with "none" algorithm (security risk per RFC 8725)
     let response = client
-        .post(format!("{}/sign/ecdsa/999", server.base_url))
+        .post(format!("{}/sign/none", server.base_url))
         .json(&claims)
         .send()
         .await
@@ -112,17 +112,24 @@ async fn test_invalid_ecdsa_curve_rejected() {
     assert_eq!(
         response.status(),
         reqwest::StatusCode::BAD_REQUEST,
-        "Should return 400 for invalid ECDSA curve size"
+        "Should return 400 for 'none' algorithm"
     );
 
     let error_response: serde_json::Value = response.json().await.expect("Failed to parse error");
+    let error_msg = error_response
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or("");
+
     assert!(
-        error_response
-            .get("error")
-            .and_then(|e| e.as_str())
-            .unwrap_or("")
-            .contains("invalid ECDSA curve size"),
-        "Error message should mention invalid ECDSA curve size"
+        error_msg.contains("'none' algorithm is rejected"),
+        "Error message should mention 'none' algorithm rejection, got: {}",
+        error_msg
+    );
+    assert!(
+        error_msg.contains("RFC 8725"),
+        "Error message should reference RFC 8725, got: {}",
+        error_msg
     );
 }
 

@@ -154,12 +154,12 @@ All six JWT signing algorithms are supported by default:
 
 | Algorithm | Type | Curve/Size | Endpoint |
 |-----------|------|------------|----------|
-| **RS256** | RSA | 2048-bit | `/sign` or `/sign/rsa/256` |
-| **RS384** | RSA | 2048-bit | `/sign/rsa/384` |
-| **RS512** | RSA | 2048-bit | `/sign/rsa/512` |
-| **ES256** | ECDSA | P-256 | `/sign/ecdsa/256` |
-| **ES384** | ECDSA | P-384 | `/sign/ecdsa/384` |
-| **ES512** | ECDSA | P-521 | `/sign/ecdsa/521` |
+| **RS256** | RSA | 2048-bit | `/sign` or `/sign/RS256` |
+| **RS384** | RSA | 2048-bit | `/sign/RS384` |
+| **RS512** | RSA | 2048-bit | `/sign/RS512` |
+| **ES256** | ECDSA | P-256 | `/sign/ES256` |
+| **ES384** | ECDSA | P-384 | `/sign/ES384` |
+| **ES512** | ECDSA | P-521 | `/sign/ES512` |
 
 By default, all algorithms are enabled and exposed in JWKS. Configure specific algorithms:
 
@@ -172,7 +172,7 @@ Signing works with all algorithms regardless of JWKS configuration:
 
 ```bash
 # Sign with ECDSA P-384
-$ > curl -X POST http://localhost:3000/sign/ecdsa/384 \
+$ > curl -X POST http://localhost:3000/sign/ES384 \
     -H "Content-Type: application/json" \
     -d '{"sub": "user-12345", "exp": 1735689600}'
 

@@ -927,30 +927,8 @@
 
             const algorithm = algorithmSelect.value;
             
-            // Map algorithm to new endpoint structure
-            let endpoint;
-            switch (algorithm) {
-                case 'RS256':
-                    endpoint = `${API_BASE}/sign/rsa/256`;
-                    break;
-                case 'RS384':
-                    endpoint = `${API_BASE}/sign/rsa/384`;
-                    break;
-                case 'RS512':
-                    endpoint = `${API_BASE}/sign/rsa/512`;
-                    break;
-                case 'ES256':
-                    endpoint = `${API_BASE}/sign/ecdsa/256`;
-                    break;
-                case 'ES384':
-                    endpoint = `${API_BASE}/sign/ecdsa/384`;
-                    break;
-                case 'ES512':
-                    endpoint = `${API_BASE}/sign/ecdsa/521`;
-                    break;
-                default:
-                    endpoint = `${API_BASE}/sign`;
-            }
+            // Use algorithm name directly in endpoint
+            const endpoint = algorithm ? `${API_BASE}/sign/${algorithm}` : `${API_BASE}/sign`;
 
             setLoading(true);
 
