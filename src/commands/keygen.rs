@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(ValueEnum, Clone, Debug)]
-pub enum KeyType {
+pub enum KeygenType {
     #[value(name = "rsa")]
     Rsa,
     #[value(name = "ecdsa")]
@@ -50,7 +50,7 @@ impl From<KeygenCurve> for EcdsaCurve {
 pub struct ArgsKeygen {
     /// Key type (RSA or ECDSA)
     #[arg(short = 't', long = "type", default_value = "rsa", value_name = "TYPE")]
-    pub key_type: KeyType,
+    pub key_type: KeygenType,
 
     /// RSA key size in bits (only for RSA keys)
     #[arg(short, long, value_name = "BITS")]
@@ -69,7 +69,7 @@ pub fn handle_keygen(args: &ArgsKeygen) -> color_eyre::Result<()> {
     use crate::key::EcdsaPrivateKey;
 
     match args.key_type {
-        KeyType::Rsa => {
+        KeygenType::Rsa => {
             // Validate RSA parameters
             let size = args.size.as_ref().ok_or_else(|| {
                 color_eyre::eyre::eyre!(
@@ -94,7 +94,7 @@ pub fn handle_keygen(args: &ArgsKeygen) -> color_eyre::Result<()> {
 
             show_output_or_save(args.output.as_ref(), &output)?;
         }
-        KeyType::Ecdsa => {
+        KeygenType::Ecdsa => {
             // Validate ECDSA parameters
             let curve = args.curve.as_ref().ok_or_else(|| {
                 color_eyre::eyre::eyre!(

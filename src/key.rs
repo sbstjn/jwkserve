@@ -14,31 +14,56 @@ use thiserror::Error;
 
 use crate::KeySignAlgorithm;
 
+/// Maximum size for PEM-encoded keys (64KB)
+const MAX_PEM_SIZE: usize = 64 * 1024;
+
+/// Maximum size for key files (64KB)
+const MAX_KEY_FILE_SIZE: u64 = 64 * 1024;
+
+/// Validate PEM string size to prevent resource exhaustion
+fn validate_pem_size(pem: &str) -> Result<(), KeyError> {
+    if pem.len() > MAX_PEM_SIZE {
+        return Err(KeyError::FileTooLarge {
+            size: pem.len() as u64,
+            max: MAX_PEM_SIZE as u64,
+        });
+    }
+    Ok(())
+}
+
+/// Validate file size before reading to prevent resource exhaustion
+fn validate_file_size(path: &Path) -> Result<(), KeyError> {
+    let metadata = std::fs::metadata(path).map_err(|e| KeyError::FailedToReadFile {
+        path: path.to_string_lossy().to_string(),
+        source: e,
+    })?;
+
+    if metadata.len() > MAX_KEY_FILE_SIZE {
+        return Err(KeyError::FileTooLarge {
+            size: metadata.len(),
+            max: MAX_KEY_FILE_SIZE,
+        });
+    }
+    Ok(())
+}
+
 #[derive(Error, Debug)]
 pub enum KeyError {
-    #[error("invalid RSA key size: {0} (must be 2048, 3072, or 4096)")]
-    InvalidRsaKeySize(usize),
+    #[error("invalid key size for {key_type}: {size} {constraint}")]
+    InvalidKeySize {
+        key_type: String,
+        size: usize,
+        constraint: String,
+    },
 
-    #[error("invalid ECDSA curve: {0}")]
-    InvalidEcdsaCurve(String),
+    #[error("failed to generate {key_type} key")]
+    FailedToGenerate { key_type: String },
 
-    #[error("failed to generate RSA key")]
-    FailedToGenerateRsa,
+    #[error("failed to encode {key_type} key to PEM format")]
+    FailedToEncode { key_type: String },
 
-    #[error("failed to generate ECDSA key")]
-    FailedToGenerateEcdsa,
-
-    #[error("failed to encode RSA key to PEM format")]
-    FailedToEncodeRsa,
-
-    #[error("failed to encode ECDSA key to PEM format")]
-    FailedToEncodeEcdsa,
-
-    #[error("failed to decode RSA key from PEM format")]
-    FailedToDecodeRsa,
-
-    #[error("failed to decode ECDSA key from PEM format")]
-    FailedToDecodeEcdsa,
+    #[error("failed to decode {key_type} key from PEM format")]
+    FailedToDecode { key_type: String },
 
     #[error("failed to read key file: {path}")]
     FailedToReadFile {
@@ -69,16 +94,24 @@ impl RsaPrivateKey {
     /// * `bits` - Key size in bits (must be 2048, 3072, or 4096)
     pub fn generate(bits: usize) -> Result<Self, KeyError> {
         if bits != 2048 && bits != 3072 && bits != 4096 {
-            return Err(KeyError::InvalidRsaKeySize(bits));
+            return Err(KeyError::InvalidKeySize {
+                key_type: "RSA".to_string(),
+                size: bits,
+                constraint: "(must be 2048, 3072, or 4096)".to_string(),
+            });
         }
 
         let mut rng = rand::thread_rng();
         let inner =
-            rsa::RsaPrivateKey::new(&mut rng, bits).map_err(|_| KeyError::FailedToGenerateRsa)?;
+            rsa::RsaPrivateKey::new(&mut rng, bits).map_err(|_| KeyError::FailedToGenerate {
+                key_type: "RSA".to_string(),
+            })?;
 
         let pem_cache = inner
             .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-            .map_err(|_| KeyError::FailedToEncodeRsa)?
+            .map_err(|_| KeyError::FailedToEncode {
+                key_type: "RSA".to_string(),
+            })?
             .to_string();
 
         Ok(Self { inner, pem_cache })
@@ -88,17 +121,12 @@ impl RsaPrivateKey {
     ///
     /// Validates PEM string length to prevent resource exhaustion (max 64KB)
     pub fn from_pem(pem: &str) -> Result<Self, KeyError> {
-        const MAX_PEM_SIZE: usize = 64 * 1024; // 64KB
-
-        if pem.len() > MAX_PEM_SIZE {
-            return Err(KeyError::FileTooLarge {
-                size: pem.len() as u64,
-                max: MAX_PEM_SIZE as u64,
-            });
-        }
+        validate_pem_size(pem)?;
 
         let inner =
-            rsa::RsaPrivateKey::from_pkcs8_pem(pem).map_err(|_| KeyError::FailedToDecodeRsa)?;
+            rsa::RsaPrivateKey::from_pkcs8_pem(pem).map_err(|_| KeyError::FailedToDecode {
+                key_type: "RSA".to_string(),
+            })?;
 
         Ok(Self {
             inner,
@@ -110,19 +138,7 @@ impl RsaPrivateKey {
     ///
     /// Validates file size to prevent resource exhaustion (max 64KB for PEM keys)
     pub fn from_pem_file(path: &Path) -> Result<Self, KeyError> {
-        const MAX_KEY_FILE_SIZE: u64 = 64 * 1024; // 64KB
-
-        let metadata = std::fs::metadata(path).map_err(|e| KeyError::FailedToReadFile {
-            path: path.to_string_lossy().to_string(),
-            source: e,
-        })?;
-
-        if metadata.len() > MAX_KEY_FILE_SIZE {
-            return Err(KeyError::FileTooLarge {
-                size: metadata.len(),
-                max: MAX_KEY_FILE_SIZE,
-            });
-        }
+        validate_file_size(path)?;
 
         let pem = std::fs::read_to_string(path).map_err(|e| KeyError::FailedToReadFile {
             path: path.to_string_lossy().to_string(),
@@ -143,7 +159,9 @@ impl RsaPrivateKey {
 
         public_key
             .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
-            .map_err(|_| KeyError::FailedToEncodeRsa)
+            .map_err(|_| KeyError::FailedToEncode {
+                key_type: "RSA".to_string(),
+            })
     }
 
     /// Get the key size in bits
@@ -237,7 +255,7 @@ impl RsaPrivateKey {
 }
 
 /// Supported ECDSA curves
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum EcdsaCurve {
     P256,
     P384,
@@ -272,6 +290,35 @@ pub struct EcdsaPrivateKey {
 }
 
 impl EcdsaPrivateKey {
+    /// Extract curve point coordinates (x, y) from the public key
+    ///
+    /// Returns the uncompressed point coordinates as byte vectors
+    fn extract_curve_point(&self) -> (Vec<u8>, Vec<u8>) {
+        match &self.inner {
+            EcdsaKey::P256(key) => {
+                let point = key.verifying_key().to_encoded_point(false);
+                (
+                    point.x().unwrap().as_slice().to_vec(),
+                    point.y().unwrap().as_slice().to_vec(),
+                )
+            }
+            EcdsaKey::P384(key) => {
+                let point = key.verifying_key().to_encoded_point(false);
+                (
+                    point.x().unwrap().as_slice().to_vec(),
+                    point.y().unwrap().as_slice().to_vec(),
+                )
+            }
+            EcdsaKey::P521(key) => {
+                let point = key.verifying_key().to_encoded_point(false);
+                (
+                    point.x().unwrap().as_slice().to_vec(),
+                    point.y().unwrap().as_slice().to_vec(),
+                )
+            }
+        }
+    }
+
     /// Generate a new ECDSA private key with the specified curve
     ///
     /// # Arguments
@@ -284,7 +331,9 @@ impl EcdsaPrivateKey {
                 let key = P256SigningKey::generate();
                 let pem = key
                     .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-                    .map_err(|_| KeyError::FailedToEncodeEcdsa)?
+                    .map_err(|_| KeyError::FailedToEncode {
+                        key_type: "ECDSA P-256".to_string(),
+                    })?
                     .to_string();
                 (EcdsaKey::P256(key), pem)
             }
@@ -292,7 +341,9 @@ impl EcdsaPrivateKey {
                 let key = P384SigningKey::generate();
                 let pem = key
                     .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-                    .map_err(|_| KeyError::FailedToEncodeEcdsa)?
+                    .map_err(|_| KeyError::FailedToEncode {
+                        key_type: "ECDSA P-384".to_string(),
+                    })?
                     .to_string();
                 (EcdsaKey::P384(key), pem)
             }
@@ -300,7 +351,9 @@ impl EcdsaPrivateKey {
                 let key = P521SigningKey::generate();
                 let pem = key
                     .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-                    .map_err(|_| KeyError::FailedToEncodeEcdsa)?
+                    .map_err(|_| KeyError::FailedToEncode {
+                        key_type: "ECDSA P-521".to_string(),
+                    })?
                     .to_string();
                 (EcdsaKey::P521(key), pem)
             }
@@ -320,14 +373,7 @@ impl EcdsaPrivateKey {
     pub fn from_pem(pem: &str) -> Result<Self, KeyError> {
         use elliptic_curve::pkcs8::DecodePrivateKey as EcDecodePrivateKey;
 
-        const MAX_PEM_SIZE: usize = 64 * 1024; // 64KB
-
-        if pem.len() > MAX_PEM_SIZE {
-            return Err(KeyError::FileTooLarge {
-                size: pem.len() as u64,
-                max: MAX_PEM_SIZE as u64,
-            });
-        }
+        validate_pem_size(pem)?;
 
         // Try each curve type
         if let Ok(key) = P256SigningKey::from_pkcs8_pem(pem) {
@@ -354,26 +400,16 @@ impl EcdsaPrivateKey {
             });
         }
 
-        Err(KeyError::FailedToDecodeEcdsa)
+        Err(KeyError::FailedToDecode {
+            key_type: "ECDSA".to_string(),
+        })
     }
 
     /// Load ECDSA private key from PEM file
     ///
     /// Validates file size to prevent resource exhaustion (max 64KB for PEM keys)
     pub fn from_pem_file(path: &Path) -> Result<Self, KeyError> {
-        const MAX_KEY_FILE_SIZE: u64 = 64 * 1024; // 64KB
-
-        let metadata = std::fs::metadata(path).map_err(|e| KeyError::FailedToReadFile {
-            path: path.to_string_lossy().to_string(),
-            source: e,
-        })?;
-
-        if metadata.len() > MAX_KEY_FILE_SIZE {
-            return Err(KeyError::FileTooLarge {
-                size: metadata.len(),
-                max: MAX_KEY_FILE_SIZE,
-            });
-        }
+        validate_file_size(path)?;
 
         let pem = std::fs::read_to_string(path).map_err(|e| KeyError::FailedToReadFile {
             path: path.to_string_lossy().to_string(),
@@ -404,7 +440,9 @@ impl EcdsaPrivateKey {
                 .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
         };
 
-        pem.map_err(|_| KeyError::FailedToEncodeEcdsa)
+        pem.map_err(|_| KeyError::FailedToEncode {
+            key_type: format!("ECDSA {}", self.curve.as_str()),
+        })
     }
 
     /// Get the curve name
@@ -520,29 +558,7 @@ impl EcdsaPrivateKey {
     /// The kid is calculated as SHA-256 thumbprint per RFC 7638,
     /// suffixed with the algorithm to support multiple algorithms per key.
     fn calculate_kid(&self, alg: &KeySignAlgorithm) -> String {
-        let (x_bytes, y_bytes) = match &self.inner {
-            EcdsaKey::P256(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-            EcdsaKey::P384(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-            EcdsaKey::P521(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-        };
+        let (x_bytes, y_bytes) = self.extract_curve_point();
 
         let x_b64 = URL_SAFE_NO_PAD.encode(&x_bytes);
         let y_b64 = URL_SAFE_NO_PAD.encode(&y_bytes);
@@ -567,29 +583,7 @@ impl EcdsaPrivateKey {
     /// # Arguments
     /// * `alg` - The signing algorithm
     pub fn to_jwk(&self, alg: &KeySignAlgorithm) -> Value {
-        let (x_bytes, y_bytes) = match &self.inner {
-            EcdsaKey::P256(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-            EcdsaKey::P384(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-            EcdsaKey::P521(key) => {
-                let point = key.verifying_key().to_encoded_point(false);
-                (
-                    point.x().unwrap().as_slice().to_vec(),
-                    point.y().unwrap().as_slice().to_vec(),
-                )
-            }
-        };
+        let (x_bytes, y_bytes) = self.extract_curve_point();
 
         let x_b64 = URL_SAFE_NO_PAD.encode(&x_bytes);
         let y_b64 = URL_SAFE_NO_PAD.encode(&y_bytes);
@@ -661,14 +655,14 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            KeyError::InvalidRsaKeySize(1024)
+            KeyError::InvalidKeySize { .. }
         ));
 
         let result = RsaPrivateKey::generate(8192);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            KeyError::InvalidRsaKeySize(8192)
+            KeyError::InvalidKeySize { .. }
         ));
     }
 
@@ -676,7 +670,10 @@ mod tests {
     fn test_from_pem_invalid_format() {
         let result = RsaPrivateKey::from_pem("not a valid pem");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), KeyError::FailedToDecodeRsa));
+        assert!(matches!(
+            result.unwrap_err(),
+            KeyError::FailedToDecode { .. }
+        ));
     }
 
     #[test]

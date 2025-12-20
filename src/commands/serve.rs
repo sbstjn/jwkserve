@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use tracing::info;
@@ -93,48 +94,59 @@ fn validate_bind_address(addr: &str) -> color_eyre::Result<IpAddr> {
         .map_err(|_| color_eyre::eyre::eyre!("invalid bind address: {}", addr))
 }
 
-/// Detected key type from PEM file
-enum DetectedKey {
-    Rsa(RsaPrivateKey),
-    EcdsaP256(EcdsaPrivateKey),
-    EcdsaP384(EcdsaPrivateKey),
-    EcdsaP521(EcdsaPrivateKey),
+/// Collection of loaded cryptographic keys
+struct KeyCollection {
+    rsa: Option<RsaPrivateKey>,
+    ecdsa: HashMap<EcdsaCurve, EcdsaPrivateKey>,
 }
 
-/// Load and auto-detect key type from PEM file
+/// Load keys from provided file paths and auto-detect their types
 ///
-/// Attempts to parse the key as RSA first, then tries each ECDSA curve.
-/// Returns an error if the key cannot be parsed as any supported type.
-fn load_and_detect_key(path: &std::path::Path) -> color_eyre::Result<DetectedKey> {
-    // Try RSA first
-    if let Ok(key) = RsaPrivateKey::from_pem_file(path) {
-        info!("Loaded RSA key from {:?} ({} bits)", path, key.size_bits());
-        return Ok(DetectedKey::Rsa(key));
-    }
+/// Attempts to parse each key as RSA first, then tries ECDSA curves.
+/// Returns an error if a key cannot be parsed or if duplicate keys of the same type are found.
+fn load_keys(paths: &[PathBuf]) -> color_eyre::Result<KeyCollection> {
+    let mut collection = KeyCollection {
+        rsa: None,
+        ecdsa: HashMap::new(),
+    };
 
-    // Try ECDSA keys
-    if let Ok(key) = EcdsaPrivateKey::from_pem_file(path) {
-        let curve = key.curve();
-        match curve {
-            EcdsaCurve::P256 => {
-                info!("Loaded ECDSA P-256 key from {:?}", path);
-                Ok(DetectedKey::EcdsaP256(key))
+    for path in paths {
+        // Try RSA first
+        if let Ok(key) = RsaPrivateKey::from_pem_file(path) {
+            info!("Loaded RSA key from {:?} ({} bits)", path, key.size_bits());
+            if collection.rsa.is_some() {
+                return Err(color_eyre::eyre::eyre!(
+                    "Multiple RSA keys provided - only one RSA key is supported"
+                ));
             }
-            EcdsaCurve::P384 => {
-                info!("Loaded ECDSA P-384 key from {:?}", path);
-                Ok(DetectedKey::EcdsaP384(key))
-            }
-            EcdsaCurve::P521 => {
-                info!("Loaded ECDSA P-521 key from {:?}", path);
-                Ok(DetectedKey::EcdsaP521(key))
-            }
+            collection.rsa = Some(key);
+            continue;
         }
-    } else {
-        Err(color_eyre::eyre::eyre!(
+
+        // Try ECDSA keys
+        if let Ok(key) = EcdsaPrivateKey::from_pem_file(path) {
+            let curve = key.curve().clone();
+            info!("Loaded ECDSA {} key from {:?}", curve.as_str(), path);
+
+            if collection.ecdsa.contains_key(&curve) {
+                return Err(color_eyre::eyre::eyre!(
+                    "Multiple ECDSA {} keys provided - only one {} key is supported",
+                    curve.as_str(),
+                    curve.as_str()
+                ));
+            }
+            collection.ecdsa.insert(curve, key);
+            continue;
+        }
+
+        // If we get here, the key couldn't be parsed
+        return Err(color_eyre::eyre::eyre!(
             "Failed to load key from {:?}: not a valid RSA or ECDSA (P-256, P-384, P-521) key",
             path
-        ))
+        ));
     }
+
+    Ok(collection)
 }
 
 pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
@@ -165,71 +177,31 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
     };
 
     // Load keys from files and auto-detect their types
-    let mut rsa_key: Option<RsaPrivateKey> = None;
-    let mut ecdsa_p256_key: Option<EcdsaPrivateKey> = None;
-    let mut ecdsa_p384_key: Option<EcdsaPrivateKey> = None;
-    let mut ecdsa_p521_key: Option<EcdsaPrivateKey> = None;
-
-    for key_file in &args.key_files {
-        match load_and_detect_key(key_file)? {
-            DetectedKey::Rsa(key) => {
-                if rsa_key.is_some() {
-                    return Err(color_eyre::eyre::eyre!(
-                        "Multiple RSA keys provided - only one RSA key is supported"
-                    ));
-                }
-                rsa_key = Some(key);
-            }
-            DetectedKey::EcdsaP256(key) => {
-                if ecdsa_p256_key.is_some() {
-                    return Err(color_eyre::eyre::eyre!(
-                        "Multiple ECDSA P-256 keys provided - only one P-256 key is supported"
-                    ));
-                }
-                ecdsa_p256_key = Some(key);
-            }
-            DetectedKey::EcdsaP384(key) => {
-                if ecdsa_p384_key.is_some() {
-                    return Err(color_eyre::eyre::eyre!(
-                        "Multiple ECDSA P-384 keys provided - only one P-384 key is supported"
-                    ));
-                }
-                ecdsa_p384_key = Some(key);
-            }
-            DetectedKey::EcdsaP521(key) => {
-                if ecdsa_p521_key.is_some() {
-                    return Err(color_eyre::eyre::eyre!(
-                        "Multiple ECDSA P-521 keys provided - only one P-521 key is supported"
-                    ));
-                }
-                ecdsa_p521_key = Some(key);
-            }
-        }
-    }
+    let mut collection = load_keys(&args.key_files)?;
 
     // Generate missing keys
-    let rsa_key = if let Some(key) = rsa_key {
+    let rsa_key = if let Some(key) = collection.rsa.take() {
         key
     } else {
         info!("Generating new RSA-2048 key");
         RsaPrivateKey::generate(2048).map_err(JWKServeError::KeyError)?
     };
 
-    let ecdsa_p256_key = if let Some(key) = ecdsa_p256_key {
+    let ecdsa_p256_key = if let Some(key) = collection.ecdsa.remove(&EcdsaCurve::P256) {
         key
     } else {
         info!("Generating ECDSA P-256 key");
         EcdsaPrivateKey::generate(EcdsaCurve::P256).map_err(JWKServeError::KeyError)?
     };
 
-    let ecdsa_p384_key = if let Some(key) = ecdsa_p384_key {
+    let ecdsa_p384_key = if let Some(key) = collection.ecdsa.remove(&EcdsaCurve::P384) {
         key
     } else {
         info!("Generating ECDSA P-384 key");
         EcdsaPrivateKey::generate(EcdsaCurve::P384).map_err(JWKServeError::KeyError)?
     };
 
-    let ecdsa_p521_key = if let Some(key) = ecdsa_p521_key {
+    let ecdsa_p521_key = if let Some(key) = collection.ecdsa.remove(&EcdsaCurve::P521) {
         key
     } else {
         info!("Generating ECDSA P-521 key");

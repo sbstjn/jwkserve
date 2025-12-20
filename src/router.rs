@@ -18,6 +18,7 @@ use crate::{
     key::{EcdsaPrivateKey, RsaPrivateKey},
     KeySignAlgorithm,
 };
+use std::collections::HashMap;
 
 #[cfg(not(feature = "headless"))]
 use axum::{http::header, response::Html};
@@ -29,11 +30,25 @@ use include_dir::{include_dir, Dir};
 #[cfg(not(feature = "headless"))]
 static WEBSITE_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/website");
 
-/// Supported key types and sizes for signing operations
+/// Cryptographic key wrapper for unified storage
 #[derive(Clone, Debug)]
-pub enum SigningKey {
+pub enum CryptoKey {
     Rsa(Arc<RsaPrivateKey>),
     Ecdsa(Arc<EcdsaPrivateKey>),
+}
+
+impl CryptoKey {
+    /// Sign JWT claims with this key using the specified algorithm
+    fn sign_jwt(
+        &self,
+        claims: &Value,
+        algorithm: &KeySignAlgorithm,
+    ) -> Result<String, crate::key::KeyError> {
+        match self {
+            CryptoKey::Rsa(key) => key.sign_jwt(claims, algorithm),
+            CryptoKey::Ecdsa(key) => key.sign_jwt(claims, algorithm),
+        }
+    }
 }
 
 /// Shared application state containing server configuration and cryptographic keys
@@ -46,14 +61,8 @@ pub struct ServerState {
     pub issuer: Arc<str>,
     /// Supported JWT signing algorithms
     pub algorithms: Arc<[KeySignAlgorithm]>,
-    /// RSA private key for signing operations (legacy, for backward compatibility)
-    pub rsa_key: Arc<RsaPrivateKey>,
-    /// ECDSA P-256 key
-    pub ecdsa_p256_key: Arc<EcdsaPrivateKey>,
-    /// ECDSA P-384 key
-    pub ecdsa_p384_key: Arc<EcdsaPrivateKey>,
-    /// ECDSA P-521 key
-    pub ecdsa_p521_key: Arc<EcdsaPrivateKey>,
+    /// Unified key storage: algorithm -> key mapping
+    keys: Arc<HashMap<KeySignAlgorithm, CryptoKey>>,
     /// Cached OpenID discovery response
     openid_config: Arc<Value>,
     /// Cached JWKS response
@@ -76,29 +85,54 @@ impl ServerState {
         let issuer: Arc<str> = Arc::from(issuer.as_str());
         let jwks_uri = format!("{}/.well-known/jwks.json", issuer);
 
-        // Pre-compute JWKS response from all keys
-        let mut keys: Vec<Value> = Vec::new();
+        // Store all keys for signing support (supports all algorithms regardless of config)
+        let rsa_key_arc = Arc::new(rsa_key);
+        let ecdsa_p256_arc = Arc::new(ecdsa_p256_key);
+        let ecdsa_p384_arc = Arc::new(ecdsa_p384_key);
+        let ecdsa_p521_arc = Arc::new(ecdsa_p521_key);
 
-        // Add RSA JWKs for configured algorithms
+        // Build key storage for ALL possible algorithms (for signing)
+        let mut key_map: HashMap<KeySignAlgorithm, CryptoKey> = HashMap::new();
+
+        // Map RSA algorithms
+        for alg in [
+            KeySignAlgorithm::RS256,
+            KeySignAlgorithm::RS384,
+            KeySignAlgorithm::RS512,
+        ] {
+            key_map.insert(alg, CryptoKey::Rsa(rsa_key_arc.clone()));
+        }
+
+        // Map ECDSA algorithms
+        key_map.insert(
+            KeySignAlgorithm::ES256,
+            CryptoKey::Ecdsa(ecdsa_p256_arc.clone()),
+        );
+        key_map.insert(
+            KeySignAlgorithm::ES384,
+            CryptoKey::Ecdsa(ecdsa_p384_arc.clone()),
+        );
+        key_map.insert(
+            KeySignAlgorithm::ES512,
+            CryptoKey::Ecdsa(ecdsa_p521_arc.clone()),
+        );
+
+        // Pre-compute JWKS response from configured algorithms only
+        let mut jwk_keys: Vec<Value> = Vec::new();
         for alg in &algorithms {
-            match alg {
+            let jwk = match alg {
                 KeySignAlgorithm::RS256 | KeySignAlgorithm::RS384 | KeySignAlgorithm::RS512 => {
-                    keys.push(rsa_key.to_jwk(alg));
+                    rsa_key_arc.to_jwk(alg)
                 }
-                KeySignAlgorithm::ES256 => {
-                    keys.push(ecdsa_p256_key.to_jwk(alg));
-                }
-                KeySignAlgorithm::ES384 => {
-                    keys.push(ecdsa_p384_key.to_jwk(alg));
-                }
-                KeySignAlgorithm::ES512 => {
-                    keys.push(ecdsa_p521_key.to_jwk(alg));
-                }
-            }
+                KeySignAlgorithm::ES256 => ecdsa_p256_arc.to_jwk(alg),
+                KeySignAlgorithm::ES384 => ecdsa_p384_arc.to_jwk(alg),
+                KeySignAlgorithm::ES512 => ecdsa_p521_arc.to_jwk(alg),
+            };
+            jwk_keys.push(jwk);
         }
 
         let jwks_response = Arc::new(json!({
-            "keys": keys
+            "keys": jwk_keys
         }));
 
         // Pre-compute OpenID configuration
@@ -121,15 +155,20 @@ impl ServerState {
         Self {
             issuer,
             algorithms: Arc::from(algorithms),
-            rsa_key: Arc::new(rsa_key),
-            ecdsa_p256_key: Arc::new(ecdsa_p256_key),
-            ecdsa_p384_key: Arc::new(ecdsa_p384_key),
-            ecdsa_p521_key: Arc::new(ecdsa_p521_key),
+            keys: Arc::new(key_map),
             openid_config,
             jwks_response,
             #[cfg(not(feature = "headless"))]
             cached_html,
         }
+    }
+
+    /// Get the key for a specific algorithm
+    ///
+    /// Returns the key even if the algorithm is not in the configured algorithms list.
+    /// This allows signing with any algorithm while only exposing configured ones in JWKS.
+    fn get_key(&self, algorithm: &KeySignAlgorithm) -> Option<&CryptoKey> {
+        self.keys.get(algorithm)
     }
 }
 
@@ -292,8 +331,7 @@ async fn jwks(State(state): State<ServerState>) -> Json<Value> {
 /// {"sub": "user123", "aud": "my-app"}
 /// ```
 async fn sign_default(State(state): State<ServerState>, Json(claims): Json<Value>) -> Response {
-    let key = SigningKey::Rsa(state.rsa_key.clone());
-    sign_with_key(state, key, KeySignAlgorithm::RS256, claims).await
+    sign_with_algorithm(state, KeySignAlgorithm::RS256, claims).await
 }
 
 /// JWT signing endpoint with RSA key
@@ -331,13 +369,7 @@ async fn sign_rsa(
         }
     };
 
-    sign_with_key(
-        state.clone(),
-        SigningKey::Rsa(state.rsa_key.clone()),
-        algorithm,
-        claims,
-    )
-    .await
+    sign_with_algorithm(state, algorithm, claims).await
 }
 
 /// JWT signing endpoint with ECDSA key
@@ -360,10 +392,10 @@ async fn sign_ecdsa(
     Path(size): Path<String>,
     Json(claims): Json<Value>,
 ) -> Response {
-    let (key, algorithm) = match size.as_str() {
-        "256" => (state.ecdsa_p256_key.clone(), KeySignAlgorithm::ES256),
-        "384" => (state.ecdsa_p384_key.clone(), KeySignAlgorithm::ES384),
-        "521" => (state.ecdsa_p521_key.clone(), KeySignAlgorithm::ES512),
+    let algorithm = match size.as_str() {
+        "256" => KeySignAlgorithm::ES256,
+        "384" => KeySignAlgorithm::ES384,
+        "521" => KeySignAlgorithm::ES512,
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -375,7 +407,7 @@ async fn sign_ecdsa(
         }
     };
 
-    sign_with_key(state, SigningKey::Ecdsa(key), algorithm, claims).await
+    sign_with_algorithm(state, algorithm, claims).await
 }
 
 /// Internal signing logic shared by all signing endpoints
@@ -387,9 +419,8 @@ async fn sign_ecdsa(
 ///
 /// If the claims do not include an 'iss' field, it will be automatically injected
 /// from the server's issuer configuration.
-async fn sign_with_key(
+async fn sign_with_algorithm(
     state: ServerState,
-    key: SigningKey,
     algorithm: KeySignAlgorithm,
     mut claims: Value,
 ) -> Response {
@@ -400,11 +431,13 @@ async fn sign_with_key(
         }
     }
 
-    // Sign the JWT with the specified key and algorithm
-    let result = match key {
-        SigningKey::Rsa(rsa_key) => rsa_key.sign_jwt(&claims, &algorithm),
-        SigningKey::Ecdsa(ecdsa_key) => ecdsa_key.sign_jwt(&claims, &algorithm),
-    };
+    // Get the key for this algorithm (should always exist)
+    let key = state
+        .get_key(&algorithm)
+        .expect("all algorithms should have keys");
+
+    // Sign the JWT with the key
+    let result = key.sign_jwt(&claims, &algorithm);
 
     match result {
         Ok(token) => (StatusCode::OK, Json(SignResponse { token })).into_response(),

@@ -25,10 +25,10 @@ enum Commands {
     /// Serve JWKS endpoint with JWT signing capabilities
     Serve(ArgsServe),
 
-    /// Generate RSA cryptographic keys for JWT signing
+    /// Generate cryptographic keys for JWT signing (RSA, ECDSA)
     Keygen(ArgsKeygen),
 
-    /// Display RSA key from private key file (public or private)
+    /// Display key from private key file (public or private)
     Show(ArgsShow),
 
     /// Verify JWT token by fetching JWKS from issuer

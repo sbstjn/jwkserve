@@ -4,8 +4,16 @@ pub mod key;
 pub mod router;
 
 use clap::ValueEnum;
+use key::EcdsaCurve;
 
-#[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
+/// Cryptographic key type
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KeyType {
+    Rsa,
+    Ecdsa,
+}
+
+#[derive(ValueEnum, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum KeySignAlgorithm {
     #[value(name = "RS256")]
     RS256,
@@ -30,6 +38,26 @@ impl KeySignAlgorithm {
             Self::ES256 => "ES256",
             Self::ES384 => "ES384",
             Self::ES512 => "ES512",
+        }
+    }
+
+    /// Get the key type required for this algorithm
+    pub fn key_type(&self) -> KeyType {
+        match self {
+            Self::RS256 | Self::RS384 | Self::RS512 => KeyType::Rsa,
+            Self::ES256 | Self::ES384 | Self::ES512 => KeyType::Ecdsa,
+        }
+    }
+
+    /// Get the ECDSA curve for this algorithm (if applicable)
+    ///
+    /// Returns None for RSA algorithms
+    pub fn curve(&self) -> Option<EcdsaCurve> {
+        match self {
+            Self::ES256 => Some(EcdsaCurve::P256),
+            Self::ES384 => Some(EcdsaCurve::P384),
+            Self::ES512 => Some(EcdsaCurve::P521),
+            _ => None,
         }
     }
 }
@@ -70,5 +98,25 @@ mod tests {
         assert_eq!(format!("{}", KeySignAlgorithm::ES256), "ES256");
         assert_eq!(format!("{}", KeySignAlgorithm::ES384), "ES384");
         assert_eq!(format!("{}", KeySignAlgorithm::ES512), "ES512");
+    }
+
+    #[test]
+    fn test_key_type() {
+        assert_eq!(KeySignAlgorithm::RS256.key_type(), KeyType::Rsa);
+        assert_eq!(KeySignAlgorithm::RS384.key_type(), KeyType::Rsa);
+        assert_eq!(KeySignAlgorithm::RS512.key_type(), KeyType::Rsa);
+        assert_eq!(KeySignAlgorithm::ES256.key_type(), KeyType::Ecdsa);
+        assert_eq!(KeySignAlgorithm::ES384.key_type(), KeyType::Ecdsa);
+        assert_eq!(KeySignAlgorithm::ES512.key_type(), KeyType::Ecdsa);
+    }
+
+    #[test]
+    fn test_curve() {
+        assert_eq!(KeySignAlgorithm::RS256.curve(), None);
+        assert_eq!(KeySignAlgorithm::RS384.curve(), None);
+        assert_eq!(KeySignAlgorithm::RS512.curve(), None);
+        assert_eq!(KeySignAlgorithm::ES256.curve(), Some(EcdsaCurve::P256));
+        assert_eq!(KeySignAlgorithm::ES384.curve(), Some(EcdsaCurve::P384));
+        assert_eq!(KeySignAlgorithm::ES512.curve(), Some(EcdsaCurve::P521));
     }
 }
