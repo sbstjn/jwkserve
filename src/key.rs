@@ -4,6 +4,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use p256::ecdsa::SigningKey as P256SigningKey;
 use p384::ecdsa::SigningKey as P384SigningKey;
+use p521::ecdsa::SigningKey as P521SigningKey;
 use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey};
 use rsa::traits::PublicKeyParts;
 use rsa::RsaPublicKey;
@@ -240,6 +241,7 @@ impl RsaPrivateKey {
 pub enum EcdsaCurve {
     P256,
     P384,
+    P521,
 }
 
 impl EcdsaCurve {
@@ -247,6 +249,7 @@ impl EcdsaCurve {
         match self {
             Self::P256 => "P-256",
             Self::P384 => "P-384",
+            Self::P521 => "P-521",
         }
     }
 }
@@ -256,6 +259,7 @@ impl EcdsaCurve {
 enum EcdsaKey {
     P256(P256SigningKey),
     P384(P384SigningKey),
+    P521(P521SigningKey),
 }
 
 /// ECDSA private key for JWT signing operations
@@ -271,7 +275,7 @@ impl EcdsaPrivateKey {
     /// Generate a new ECDSA private key with the specified curve
     ///
     /// # Arguments
-    /// * `curve` - The elliptic curve to use (P-256 or P-384)
+    /// * `curve` - The elliptic curve to use (P-256, P-384, or P-521)
     pub fn generate(curve: EcdsaCurve) -> Result<Self, KeyError> {
         use elliptic_curve::pkcs8::EncodePrivateKey as EcEncodePrivateKey;
 
@@ -291,6 +295,14 @@ impl EcdsaPrivateKey {
                     .map_err(|_| KeyError::FailedToEncodeEcdsa)?
                     .to_string();
                 (EcdsaKey::P384(key), pem)
+            }
+            EcdsaCurve::P521 => {
+                let key = P521SigningKey::generate();
+                let pem = key
+                    .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+                    .map_err(|_| KeyError::FailedToEncodeEcdsa)?
+                    .to_string();
+                (EcdsaKey::P521(key), pem)
             }
         };
 
@@ -330,6 +342,14 @@ impl EcdsaPrivateKey {
             return Ok(Self {
                 inner: EcdsaKey::P384(key),
                 curve: EcdsaCurve::P384,
+                pem_cache: pem.to_string(),
+            });
+        }
+
+        if let Ok(key) = P521SigningKey::from_pkcs8_pem(pem) {
+            return Ok(Self {
+                inner: EcdsaKey::P521(key),
+                curve: EcdsaCurve::P521,
                 pem_cache: pem.to_string(),
             });
         }
@@ -377,6 +397,9 @@ impl EcdsaPrivateKey {
                 .verifying_key()
                 .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
             EcdsaKey::P384(key) => key
+                .verifying_key()
+                .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
+            EcdsaKey::P521(key) => key
                 .verifying_key()
                 .to_public_key_pem(rsa::pkcs8::LineEnding::LF),
         };
@@ -458,6 +481,13 @@ impl EcdsaPrivateKey {
                     point.y().unwrap().as_slice().to_vec(),
                 )
             }
+            EcdsaKey::P521(key) => {
+                let point = key.verifying_key().to_encoded_point(false);
+                (
+                    point.x().unwrap().as_slice().to_vec(),
+                    point.y().unwrap().as_slice().to_vec(),
+                )
+            }
         };
 
         let x_b64 = URL_SAFE_NO_PAD.encode(&x_bytes);
@@ -492,6 +522,13 @@ impl EcdsaPrivateKey {
                 )
             }
             EcdsaKey::P384(key) => {
+                let point = key.verifying_key().to_encoded_point(false);
+                (
+                    point.x().unwrap().as_slice().to_vec(),
+                    point.y().unwrap().as_slice().to_vec(),
+                )
+            }
+            EcdsaKey::P521(key) => {
                 let point = key.verifying_key().to_encoded_point(false);
                 (
                     point.x().unwrap().as_slice().to_vec(),

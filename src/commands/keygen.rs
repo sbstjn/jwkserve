@@ -32,6 +32,8 @@ pub enum KeygenCurve {
     P256,
     #[value(name = "384")]
     P384,
+    #[value(name = "521")]
+    P521,
 }
 
 impl From<KeygenCurve> for EcdsaCurve {
@@ -39,6 +41,7 @@ impl From<KeygenCurve> for EcdsaCurve {
         match curve {
             KeygenCurve::P256 => EcdsaCurve::P256,
             KeygenCurve::P384 => EcdsaCurve::P384,
+            KeygenCurve::P521 => EcdsaCurve::P521,
         }
     }
 }
@@ -95,7 +98,7 @@ pub fn handle_keygen(args: &ArgsKeygen) -> color_eyre::Result<()> {
             // Validate ECDSA parameters
             let curve = args.curve.as_ref().ok_or_else(|| {
                 color_eyre::eyre::eyre!(
-                    "ECDSA key generation requires --curve parameter. Use: --curve 256 or --curve 384"
+                    "ECDSA key generation requires --curve parameter. Use: --curve 256, --curve 384, or --curve 521"
                 )
             })?;
 
