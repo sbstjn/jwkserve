@@ -1,3 +1,10 @@
+//! Common test utilities and helpers
+//!
+//! Provides reusable components for integration testing:
+//! - TestServer: Spawn ephemeral servers with fixture keys
+//! - JWT verification: Validate signatures using JWKS
+//! - Fixture management: Load deterministic test keys
+
 use std::net::TcpListener;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -12,9 +19,13 @@ use jwkserve::{
 static FIXTURE_KEY_2048: OnceLock<RsaPrivateKey> = OnceLock::new();
 static FIXTURE_KEY_3072: OnceLock<RsaPrivateKey> = OnceLock::new();
 static FIXTURE_KEY_4096: OnceLock<RsaPrivateKey> = OnceLock::new();
+static FIXTURE_ECDSA_P256: OnceLock<EcdsaPrivateKey> = OnceLock::new();
+static FIXTURE_ECDSA_P384: OnceLock<EcdsaPrivateKey> = OnceLock::new();
+static FIXTURE_ECDSA_P521: OnceLock<EcdsaPrivateKey> = OnceLock::new();
 
 pub struct TestServer {
     pub base_url: String,
+    #[allow(dead_code)]
     pub issuer: String,
     handle: JoinHandle<()>,
 }
@@ -33,10 +44,38 @@ fn load_fixture_key(bits: usize) -> color_eyre::Result<RsaPrivateKey> {
             let path = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests")
                 .join("fixtures")
-                .join(format!("example_{bits}.pem"));
+                .join(format!("rsa_{bits}.pem"));
 
             RsaPrivateKey::from_pem_file(&path)
                 .unwrap_or_else(|_| panic!("Failed to load fixture key from {}", path.display()))
+        })
+        .clone())
+}
+
+/// Load ECDSA key from fixture file (cached for reuse)
+pub fn load_ecdsa_fixture_key(curve: EcdsaCurve) -> color_eyre::Result<EcdsaPrivateKey> {
+    let static_key = match curve {
+        EcdsaCurve::P256 => &FIXTURE_ECDSA_P256,
+        EcdsaCurve::P384 => &FIXTURE_ECDSA_P384,
+        EcdsaCurve::P521 => &FIXTURE_ECDSA_P521,
+    };
+
+    Ok(static_key
+        .get_or_init(|| {
+            let curve_name = match curve {
+                EcdsaCurve::P256 => "p256",
+                EcdsaCurve::P384 => "p384",
+                EcdsaCurve::P521 => "p521",
+            };
+
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests")
+                .join("fixtures")
+                .join(format!("ecdsa_{}.pem", curve_name));
+
+            EcdsaPrivateKey::from_pem_file(&path).unwrap_or_else(|_| {
+                panic!("Failed to load ECDSA fixture key from {}", path.display())
+            })
         })
         .clone())
 }
@@ -61,13 +100,10 @@ impl TestServer {
         let issuer = format!("http://localhost:{port}");
         let base_url = issuer.clone();
 
-        // Generate ECDSA keys for all test servers
-        let ecdsa_p256 = EcdsaPrivateKey::generate(EcdsaCurve::P256)
-            .map_err(|e| color_eyre::eyre::eyre!("Failed to generate P-256 key: {}", e))?;
-        let ecdsa_p384 = EcdsaPrivateKey::generate(EcdsaCurve::P384)
-            .map_err(|e| color_eyre::eyre::eyre!("Failed to generate P-384 key: {}", e))?;
-        let ecdsa_p521 = EcdsaPrivateKey::generate(EcdsaCurve::P521)
-            .map_err(|e| color_eyre::eyre::eyre!("Failed to generate P-521 key: {}", e))?;
+        // Use ECDSA fixture keys for deterministic testing
+        let ecdsa_p256 = load_ecdsa_fixture_key(EcdsaCurve::P256)?;
+        let ecdsa_p384 = load_ecdsa_fixture_key(EcdsaCurve::P384)?;
+        let ecdsa_p521 = load_ecdsa_fixture_key(EcdsaCurve::P521)?;
 
         // Build router with state
         let state = ServerState::new(
@@ -161,6 +197,7 @@ impl TestServer {
     }
 
     /// Fetch OpenID configuration
+    #[allow(dead_code)]
     pub async fn fetch_openid_config(&self) -> color_eyre::Result<serde_json::Value> {
         let url = format!("{}/.well-known/openid-configuration", self.base_url);
         let config = reqwest::get(&url).await?.json().await?;
@@ -187,7 +224,7 @@ pub fn decode_jwt_header(token: &str) -> color_eyre::Result<jsonwebtoken::Header
     Ok(decode_header(token)?)
 }
 
-/// Verify a JWT token using jsonwebtoken
+/// Verify a JWT token using jsonwebtoken (supports both RSA and ECDSA)
 pub fn verify_token(
     token: &str,
     jwks: &serde_json::Value,
@@ -213,7 +250,14 @@ pub fn verify_token(
         jsonwebtoken::Algorithm::RS256 => "RS256",
         jsonwebtoken::Algorithm::RS384 => "RS384",
         jsonwebtoken::Algorithm::RS512 => "RS512",
-        _ => return Err(color_eyre::eyre::eyre!("Unsupported algorithm")),
+        jsonwebtoken::Algorithm::ES256 => "ES256",
+        jsonwebtoken::Algorithm::ES384 => "ES384",
+        _ => {
+            return Err(color_eyre::eyre::eyre!(
+                "Unsupported algorithm: {:?}",
+                header.alg
+            ))
+        }
     };
 
     let key_json = keys
@@ -241,16 +285,37 @@ pub fn verify_token(
             )
         })?;
 
-    let n = key_json
-        .get("n")
+    // Determine key type and create appropriate decoding key
+    let kty = key_json
+        .get("kty")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'n' in key"))?;
-    let e = key_json
-        .get("e")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'e' in key"))?;
+        .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'kty' in key"))?;
 
-    let decoding_key = DecodingKey::from_rsa_components(n, e)?;
+    let decoding_key = match kty {
+        "RSA" => {
+            let n = key_json
+                .get("n")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'n' in RSA key"))?;
+            let e = key_json
+                .get("e")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'e' in RSA key"))?;
+            DecodingKey::from_rsa_components(n, e)?
+        }
+        "EC" => {
+            let x = key_json
+                .get("x")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'x' in EC key"))?;
+            let y = key_json
+                .get("y")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| color_eyre::eyre::eyre!("Missing 'y' in EC key"))?;
+            DecodingKey::from_ec_components(x, y)?
+        }
+        _ => return Err(color_eyre::eyre::eyre!("Unsupported key type: {}", kty)),
+    };
 
     let mut validation = Validation::new(header.alg);
     validation.validate_aud = false;
