@@ -274,11 +274,10 @@ impl EcdsaPrivateKey {
     /// * `curve` - The elliptic curve to use (P-256 or P-384)
     pub fn generate(curve: EcdsaCurve) -> Result<Self, KeyError> {
         use elliptic_curve::pkcs8::EncodePrivateKey as EcEncodePrivateKey;
-        use rand::rngs::OsRng;
 
         let (inner, pem_cache) = match &curve {
             EcdsaCurve::P256 => {
-                let key = P256SigningKey::random(&mut OsRng);
+                let key = P256SigningKey::generate();
                 let pem = key
                     .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
                     .map_err(|_| KeyError::FailedToEncodeEcdsa)?
@@ -286,7 +285,7 @@ impl EcdsaPrivateKey {
                 (EcdsaKey::P256(key), pem)
             }
             EcdsaCurve::P384 => {
-                let key = P384SigningKey::random(&mut OsRng);
+                let key = P384SigningKey::generate();
                 let pem = key
                     .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
                     .map_err(|_| KeyError::FailedToEncodeEcdsa)?
