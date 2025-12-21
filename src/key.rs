@@ -150,6 +150,26 @@ impl RsaPrivateKey {
             })
     }
 
+    pub fn to_der(&self) -> Result<Vec<u8>, KeyError> {
+        self.inner
+            .to_pkcs8_der()
+            .map(|der| der.as_bytes().to_vec())
+            .map_err(|_| KeyError::FailedToEncode {
+                key_type: "RSA".to_string(),
+            })
+    }
+
+    pub fn to_public_der(&self) -> Result<Vec<u8>, KeyError> {
+        let public_key = RsaPublicKey::from(&self.inner);
+
+        public_key
+            .to_public_key_der()
+            .map(|der| der.as_bytes().to_vec())
+            .map_err(|_| KeyError::FailedToEncode {
+                key_type: "RSA".to_string(),
+            })
+    }
+
     pub fn size_bits(&self) -> usize {
         self.inner.n().bits()
     }
@@ -379,6 +399,50 @@ impl EcdsaPrivateKey {
         };
 
         pem.map_err(|_| KeyError::FailedToEncode {
+            key_type: format!("ECDSA {}", self.curve),
+        })
+    }
+
+    pub fn to_der(&self) -> Result<Vec<u8>, KeyError> {
+        use elliptic_curve::pkcs8::EncodePrivateKey as EcEncodePrivateKey;
+
+        /// Export private key DER (helper macro to eliminate duplication)
+        macro_rules! export_der {
+            ($key:expr) => {
+                $key.to_pkcs8_der().map(|der| der.as_bytes().to_vec())
+            };
+        }
+
+        let der = match &self.inner {
+            EcdsaKey::P256(key) => export_der!(key),
+            EcdsaKey::P384(key) => export_der!(key),
+            EcdsaKey::P521(key) => export_der!(key),
+        };
+
+        der.map_err(|_| KeyError::FailedToEncode {
+            key_type: format!("ECDSA {}", self.curve),
+        })
+    }
+
+    pub fn to_public_der(&self) -> Result<Vec<u8>, KeyError> {
+        use elliptic_curve::pkcs8::EncodePublicKey as EcEncodePublicKey;
+
+        /// Export public key DER (helper macro to eliminate duplication)
+        macro_rules! export_public_der {
+            ($key:expr) => {
+                $key.verifying_key()
+                    .to_public_key_der()
+                    .map(|der| der.as_bytes().to_vec())
+            };
+        }
+
+        let der = match &self.inner {
+            EcdsaKey::P256(key) => export_public_der!(key),
+            EcdsaKey::P384(key) => export_public_der!(key),
+            EcdsaKey::P521(key) => export_public_der!(key),
+        };
+
+        der.map_err(|_| KeyError::FailedToEncode {
             key_type: format!("ECDSA {}", self.curve),
         })
     }
