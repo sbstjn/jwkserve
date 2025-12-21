@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::utils::base64;
+use crate::utils::base64 as base64url;
 use crate::KeySignAlgorithm;
 
 /// Maximum size for PEM-encoded keys (64KB)
@@ -187,14 +187,14 @@ impl RsaPrivateKey {
         let n = self.inner.n().to_bytes_be();
         let e = self.inner.e().to_bytes_be();
 
-        let n_b64 = base64::encode(&n);
-        let e_b64 = base64::encode(&e);
+        let n_b64 = base64url::encode(&n);
+        let e_b64 = base64url::encode(&e);
 
         let thumbprint_input = format!(r#"{{"e":"{e_b64}","kty":"RSA","n":"{n_b64}"}}"#);
         let mut hasher = Sha256::new();
         hasher.update(thumbprint_input.as_bytes());
         let thumbprint = hasher.finalize();
-        let kid_base = base64::encode(&thumbprint);
+        let kid_base = base64url::encode(&thumbprint);
 
         format!("{}-{}", kid_base, alg.as_ref())
     }
@@ -203,8 +203,8 @@ impl RsaPrivateKey {
         let n = self.inner.n().to_bytes_be();
         let e = self.inner.e().to_bytes_be();
 
-        let n_b64 = base64::encode(&n);
-        let e_b64 = base64::encode(&e);
+        let n_b64 = base64url::encode(&n);
+        let e_b64 = base64url::encode(&e);
 
         let kid = self.calculate_kid(alg);
 
@@ -443,8 +443,8 @@ impl EcdsaPrivateKey {
         let claims_json = serde_json::to_string(&claims)
             .map_err(|e| KeyError::FailedToSign(format!("claims serialization: {}", e)))?;
 
-        let header_b64 = base64::encode(header_json.as_bytes());
-        let claims_b64 = base64::encode(claims_json.as_bytes());
+        let header_b64 = base64url::encode(header_json.as_bytes());
+        let claims_b64 = base64url::encode(claims_json.as_bytes());
 
         let signing_input = format!("{}.{}", header_b64, claims_b64);
 
@@ -459,7 +459,7 @@ impl EcdsaPrivateKey {
             }
         };
 
-        let signature_b64 = base64::encode(&signature.to_bytes());
+        let signature_b64 = base64url::encode(&signature.to_bytes());
 
         Ok(format!("{}.{}", signing_input, signature_b64))
     }
@@ -467,8 +467,8 @@ impl EcdsaPrivateKey {
     fn calculate_kid(&self, alg: &KeySignAlgorithm) -> String {
         let (x_bytes, y_bytes) = self.extract_curve_point();
 
-        let x_b64 = base64::encode(&x_bytes);
-        let y_b64 = base64::encode(&y_bytes);
+        let x_b64 = base64url::encode(&x_bytes);
+        let y_b64 = base64url::encode(&y_bytes);
 
         let thumbprint_input = format!(
             r#"{{"crv":"{}","kty":"EC","x":"{x_b64}","y":"{y_b64}"}}"#,
@@ -477,7 +477,7 @@ impl EcdsaPrivateKey {
         let mut hasher = Sha256::new();
         hasher.update(thumbprint_input.as_bytes());
         let thumbprint = hasher.finalize();
-        let kid_base = base64::encode(&thumbprint);
+        let kid_base = base64url::encode(&thumbprint);
 
         format!("{}-{}", kid_base, alg.as_ref())
     }
@@ -485,8 +485,8 @@ impl EcdsaPrivateKey {
     pub fn to_jwk(&self, alg: &KeySignAlgorithm) -> Value {
         let (x_bytes, y_bytes) = self.extract_curve_point();
 
-        let x_b64 = base64::encode(&x_bytes);
-        let y_b64 = base64::encode(&y_bytes);
+        let x_b64 = base64url::encode(&x_bytes);
+        let y_b64 = base64url::encode(&y_bytes);
 
         let kid = self.calculate_kid(alg);
 
