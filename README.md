@@ -12,7 +12,7 @@ Speed up local development with instant JWT generation. Running integration test
 
 Available as [sbstjn/jwkserve on DockerHub](https://hub.docker.com/r/sbstjn/jwkserve) and [jwkserve.com](https://jwkserve.com).
 
-[![jwkserve.com](./docs/screenshot.png)](https://jwkserve.com)
+[![jwkserve.com](https://raw.githubusercontent.com/sbstjn/jwkserve/refs/heads/main/docs/screenshot.png)](https://jwkserve.com)
 
 ## Common JWKS Flow
 
