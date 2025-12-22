@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub mod keygen;
 pub mod serve;
 pub mod show;
+pub mod sign;
 pub mod verify;
 
 /// Write response content to file or stdout

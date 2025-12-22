@@ -4,6 +4,7 @@ use jwkserve::commands::{
     keygen::{handle_keygen, ArgsKeygen},
     serve::{handle_serve, ArgsServe},
     show::{handle_show, ArgsShow},
+    sign::{handle_sign, ArgsSign},
     verify::{handle_verify, ArgsVerify},
 };
 
@@ -31,6 +32,9 @@ enum Commands {
     /// Display key from private key file (public or private)
     Show(ArgsShow),
 
+    /// Sign JWT token using JWKS endpoint
+    Sign(ArgsSign),
+
     /// Verify JWT token by fetching JWKS from issuer
     Verify(ArgsVerify),
 }
@@ -56,6 +60,7 @@ async fn main() -> color_eyre::Result<()> {
         Commands::Keygen(args) => handle_keygen(args)?,
         Commands::Serve(args) => handle_serve(args).await?,
         Commands::Show(args) => handle_show(args).await?,
+        Commands::Sign(args) => handle_sign(args).await?,
         Commands::Verify(args) => handle_verify(args).await?,
     }
 
