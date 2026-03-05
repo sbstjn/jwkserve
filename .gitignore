@@ -18,3 +18,5 @@ infrastructure/.terraform.lock.hcl
 # Private keys
 infrastructure/fixtures/
 infrastructure/.env
+
+docs/CODEBASE.md
