@@ -92,6 +92,9 @@ resource "scaleway_container" "container" {
   http_option    = "redirected"
   privacy = "public"
   deploy  = true
+  environment_variables = {
+    JWKSERVE_ENABLE_TRACKING = "true"
+  }
 }
 
 resource "scaleway_container_domain" "domain" {

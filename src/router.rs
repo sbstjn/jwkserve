@@ -129,6 +129,13 @@ impl ServerState {
             let html = TEMPLATE
                 .replace("{{ISSUER}}", &issuer)
                 .replace("{{VERSION}}", VERSION);
+            let html = if std::env::var("JWKSERVE_ENABLE_TRACKING").as_deref() == Ok("true") {
+                const TRACKING_SCRIPT: &str = r#"    <script defer src="https://track.heft.io/tracker.js" data-site-id="d4308e95-5ecf-46a9-8602-fae51ade4ba4"></script>
+"#;
+                html.replacen("</body>", &format!("{}</body>", TRACKING_SCRIPT), 1)
+            } else {
+                html
+            };
             Arc::from(html.as_str())
         };
 
