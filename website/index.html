@@ -598,11 +598,11 @@
                         <div style="display: flex; flex-direction: column; gap: 1rem;">
                             <div>
                                 <div style="font-size: 0.875rem; color: #a8a8b8; margin-bottom: 0.5rem; font-weight: 600;">OpenID Configuration</div>
-                                <a href="/.well-known/openid-configuration" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/openid-configuration</a>
+                                <a id="openid-link" href="/.well-known/openid-configuration" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/openid-configuration</a>
                             </div>
                             <div>
                                 <div style="font-size: 0.875rem; color: #a8a8b8; margin-bottom: 0.5rem; font-weight: 600;">JSON Web Key Set (JWKS)</div>
-                                <a href="/.well-known/jwks.json" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/jwks.json</a>
+                                <a id="jwks-link" href="/.well-known/jwks.json" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/jwks.json</a>
                             </div>
                         </div>
                     </div>
@@ -614,7 +614,7 @@
     <footer>
         <div class="container">
             <div class="footer-content">
-                <p>All token generation happens server-side. Your claims are sent to <code>{{ISSUER}}</code> for signing.</p>
+                <p>All token generation happens server-side. Your claims are sent to <code id="issuer-display">{{ISSUER}}</code> for signing.</p>
                 <p style="margin-top: 1rem;">
                     <a href="https://github.com/sbstjn/jwkserve" target="_blank" style="color: #a8d5ff; text-decoration: none; font-weight: 500; transition: color 0.2s;" onmouseover="this.style.color='#c5a3ff'" onmouseout="this.style.color='#a8d5ff'">GitHub Repository</a>
                     <span style="opacity: 0.3; margin: 0 0.75rem;">•</span>
@@ -626,7 +626,8 @@
     </footer>
 
     <script>
-        const API_BASE = '{{ISSUER}}';
+        const STATIC_ISSUER = '{{ISSUER}}';
+        const IS_DYNAMIC_ISSUER = {{ISSUER_IS_DYNAMIC}};
         let debounceTimer = null;
         let currentRequest = null;
 
@@ -644,6 +645,52 @@
 
         const STORAGE_KEY = 'jwkserve-claims';
         const STORAGE_PERSIST_KEY = 'jwkserve-persist-enabled';
+
+        function getRuntimeOrigin() {
+            return window.location.origin || `${window.location.protocol}//${window.location.host}`;
+        }
+
+        function getDisplayIssuer() {
+            return IS_DYNAMIC_ISSUER ? getRuntimeOrigin() : STATIC_ISSUER;
+        }
+
+        function updateIssuerDisplay() {
+            const issuer = getDisplayIssuer();
+            const openidLink = document.getElementById('openid-link');
+            const jwksLink = document.getElementById('jwks-link');
+            const issuerDisplay = document.getElementById('issuer-display');
+
+            if (openidLink) {
+                openidLink.textContent = `${issuer}/.well-known/openid-configuration`;
+            }
+
+            if (jwksLink) {
+                jwksLink.textContent = `${issuer}/.well-known/jwks.json`;
+            }
+
+            if (issuerDisplay) {
+                issuerDisplay.textContent = issuer;
+            }
+        }
+
+        function normalizeClaimsText(claimsText) {
+            if (!IS_DYNAMIC_ISSUER || !claimsText) {
+                return claimsText;
+            }
+
+            try {
+                const claims = JSON.parse(claimsText);
+
+                if (claims && typeof claims === 'object' && !Array.isArray(claims) && claims.iss === STATIC_ISSUER) {
+                    delete claims.iss;
+                    return JSON.stringify(claims, null, 2);
+                }
+            } catch (e) {
+                return claimsText;
+            }
+
+            return claimsText;
+        }
 
         function setStatus(text, type = '') {
             const statusTextElement = document.getElementById('status-text');
@@ -806,7 +853,7 @@
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
-                    return saved;
+                    return normalizeClaimsText(saved);
                 }
             } catch (e) {
                 console.error('Failed to load claims:', e);
@@ -926,9 +973,7 @@
             }
 
             const algorithm = algorithmSelect.value;
-            
-            // Use algorithm name directly in endpoint
-            const endpoint = algorithm ? `${API_BASE}/sign/${algorithm}` : `${API_BASE}/sign`;
+            const endpoint = algorithm ? `/sign/${algorithm}` : '/sign';
 
             setLoading(true);
 
@@ -1020,10 +1065,13 @@
             const initialClaims = {
                 "sub": "1234567890",
                 "name": "John Doe",
-                "iss": "{{ISSUER}}",
                 "iat": now,
                 "exp": exp
             };
+
+            if (!IS_DYNAMIC_ISSUER) {
+                initialClaims.iss = STATIC_ISSUER;
+            }
             
             claimsTextarea.value = JSON.stringify(initialClaims, null, 2);
         }
@@ -1110,6 +1158,7 @@
             }
         }
 
+        updateIssuerDisplay();
         initializeClaims();
         updateTimestampDisplay();
         generateToken();

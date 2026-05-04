@@ -165,12 +165,13 @@ impl ServerState {
         let cached_html = {
             const TEMPLATE: &str = include_str!("../website/index.html");
             const VERSION: &str = env!("CARGO_PKG_VERSION");
-            let issuer_label = match &issuer_mode {
-                IssuerMode::Static(issuer) => issuer.to_string(),
-                IssuerMode::FromHost { scheme, .. } => format!("{scheme}://{{host}}"),
+            let (issuer_label, issuer_is_dynamic) = match &issuer_mode {
+                IssuerMode::Static(issuer) => (issuer.to_string(), "false"),
+                IssuerMode::FromHost { scheme, .. } => (format!("{scheme}://{{host}}"), "true"),
             };
             let html = TEMPLATE
                 .replace("{{ISSUER}}", &issuer_label)
+                .replace("{{ISSUER_IS_DYNAMIC}}", issuer_is_dynamic)
                 .replace("{{VERSION}}", VERSION);
             let html = if std::env::var("JWKSERVE_ENABLE_TRACKING").as_deref() == Ok("true") {
                 const TRACKING_SCRIPT: &str = r#"    <script defer src="https://track.heft.io/tracker.js" data-site-id="d4308e95-5ecf-46a9-8602-fae51ade4ba4"></script>
@@ -623,5 +624,51 @@ mod tests {
             config.get("jwks_uri").unwrap(),
             "http://localhost:3000/.well-known/jwks.json"
         );
+    }
+
+    #[cfg(not(feature = "headless"))]
+    #[test]
+    fn test_dynamic_html_uses_runtime_origin_and_omits_default_iss() {
+        let state = dynamic_state("https", true);
+
+        assert!(state
+            .cached_html
+            .contains("const IS_DYNAMIC_ISSUER = true;"));
+        assert!(state
+            .cached_html
+            .contains("const endpoint = algorithm ? `/sign/${algorithm}` : '/sign';"));
+        assert!(state.cached_html.contains("if (!IS_DYNAMIC_ISSUER) {"));
+        assert!(!state.cached_html.contains("\"iss\": \"https://{host}\""));
+    }
+
+    #[cfg(not(feature = "headless"))]
+    #[test]
+    fn test_static_html_keeps_static_issuer_defaults() {
+        let rsa_fixture = fixture_path("rsa_2048.pem");
+        let ecdsa_p256_fixture = fixture_path("ecdsa_p256.pem");
+        let ecdsa_p384_fixture = fixture_path("ecdsa_p384.pem");
+        let ecdsa_p521_fixture = fixture_path("ecdsa_p521.pem");
+        let rsa_key = RsaPrivateKey::from_pem_file(&rsa_fixture).unwrap();
+        let ecdsa_p256_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p256_fixture).unwrap();
+        let ecdsa_p384_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p384_fixture).unwrap();
+        let ecdsa_p521_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p521_fixture).unwrap();
+        let state = ServerState::new(
+            IssuerMode::Static(Arc::from("https://issuer.example")),
+            vec![KeySignAlgorithm::RS256, KeySignAlgorithm::ES256],
+            rsa_key,
+            ecdsa_p256_key,
+            ecdsa_p384_key,
+            ecdsa_p521_key,
+        );
+
+        assert!(state
+            .cached_html
+            .contains("const IS_DYNAMIC_ISSUER = false;"));
+        assert!(state
+            .cached_html
+            .contains("const STATIC_ISSUER = 'https://issuer.example';"));
+        assert!(state
+            .cached_html
+            .contains("initialClaims.iss = STATIC_ISSUER;"));
     }
 }
