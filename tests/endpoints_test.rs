@@ -34,6 +34,98 @@ async fn test_openid_discovery_endpoint() {
 }
 
 #[tokio::test]
+async fn test_openid_discovery_endpoint_dynamic_from_host() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "http", false)
+        .await
+        .expect("Failed to spawn server");
+
+    let config = server
+        .fetch_openid_config_with_host("tenant-a.test")
+        .await
+        .expect("Failed to fetch OpenID config");
+
+    assert_eq!(
+        config.get("issuer").expect("Missing issuer field"),
+        "http://tenant-a.test"
+    );
+    assert_eq!(
+        config.get("jwks_uri").expect("Missing jwks_uri field"),
+        "http://tenant-a.test/.well-known/jwks.json"
+    );
+}
+
+#[tokio::test]
+async fn test_openid_discovery_endpoint_dynamic_https_scheme() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "https", false)
+        .await
+        .expect("Failed to spawn server");
+
+    let config = server
+        .fetch_openid_config_with_host("tenant-c.test")
+        .await
+        .expect("Failed to fetch OpenID config");
+
+    assert_eq!(
+        config.get("issuer").expect("Missing issuer field"),
+        "https://tenant-c.test"
+    );
+    assert_eq!(
+        config.get("jwks_uri").expect("Missing jwks_uri field"),
+        "https://tenant-c.test/.well-known/jwks.json"
+    );
+}
+
+#[tokio::test]
+async fn test_openid_discovery_endpoint_dynamic_forwarded_headers() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "http", true)
+        .await
+        .expect("Failed to spawn server");
+
+    let config = server
+        .fetch_openid_config_with_headers(&[
+            ("host", "internal.local"),
+            ("x-forwarded-host", "tenant-public.test"),
+            ("x-forwarded-proto", "https"),
+        ])
+        .await
+        .expect("Failed to fetch OpenID config");
+
+    assert_eq!(
+        config.get("issuer").expect("Missing issuer field"),
+        "https://tenant-public.test"
+    );
+    assert_eq!(
+        config.get("jwks_uri").expect("Missing jwks_uri field"),
+        "https://tenant-public.test/.well-known/jwks.json"
+    );
+}
+
+#[tokio::test]
+async fn test_openid_discovery_endpoint_dynamic_forwarded_headers_first_value() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "http", true)
+        .await
+        .expect("Failed to spawn server");
+
+    let config = server
+        .fetch_openid_config_with_headers(&[
+            ("host", "internal.local"),
+            ("x-forwarded-host", "tenant-a.test, proxy.local"),
+            ("x-forwarded-proto", "https, http"),
+        ])
+        .await
+        .expect("Failed to fetch OpenID config");
+
+    assert_eq!(
+        config.get("issuer").expect("Missing issuer field"),
+        "https://tenant-a.test"
+    );
+    assert_eq!(
+        config.get("jwks_uri").expect("Missing jwks_uri field"),
+        "https://tenant-a.test/.well-known/jwks.json"
+    );
+}
+
+#[tokio::test]
 async fn test_jwks_endpoint_structure() {
     let server = TestServer::spawn(
         2048,

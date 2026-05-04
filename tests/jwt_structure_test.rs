@@ -92,6 +92,33 @@ async fn test_issuer_auto_injection() {
 }
 
 #[tokio::test]
+async fn test_dynamic_issuer_auto_injection_from_host() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "http", false)
+        .await
+        .expect("Failed to spawn server");
+
+    let claims_without_iss = json!({"sub": "user", "exp": 9999999999_i64});
+
+    let token = server
+        .sign_jwt_with_host(claims_without_iss, None, "tenant-b.test")
+        .await
+        .expect("Failed to sign");
+
+    let jwks = server.fetch_jwks().await.expect("Failed to fetch JWKS");
+    let verified_claims = verify_token(&token, &jwks).expect("Failed to verify");
+
+    assert_eq!(
+        verified_claims
+            .get("iss")
+            .expect("Missing iss claim")
+            .as_str()
+            .expect("Issuer is not a string"),
+        "http://tenant-b.test",
+        "Issuer should be auto-injected from the request host"
+    );
+}
+
+#[tokio::test]
 async fn test_issuer_preservation() {
     let server = TestServer::spawn(2048, vec![KeySignAlgorithm::RS256])
         .await
@@ -120,6 +147,38 @@ async fn test_issuer_preservation() {
             .expect("Issuer is not a string"),
         custom_issuer,
         "Custom issuer should be preserved"
+    );
+}
+
+#[tokio::test]
+async fn test_dynamic_issuer_preservation() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "http", false)
+        .await
+        .expect("Failed to spawn server");
+
+    let custom_issuer = "https://explicit.example";
+    let claims_with_iss = json!({
+        "sub": "user",
+        "iss": custom_issuer,
+        "exp": 9999999999_i64
+    });
+
+    let token = server
+        .sign_jwt_with_host(claims_with_iss, None, "tenant-b.test")
+        .await
+        .expect("Failed to sign");
+
+    let jwks = server.fetch_jwks().await.expect("Failed to fetch JWKS");
+    let verified_claims = verify_token(&token, &jwks).expect("Failed to verify");
+
+    assert_eq!(
+        verified_claims
+            .get("iss")
+            .expect("Missing iss claim")
+            .as_str()
+            .expect("Issuer is not a string"),
+        custom_issuer,
+        "Custom issuer should be preserved in dynamic mode"
     );
 }
 

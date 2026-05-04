@@ -1,13 +1,13 @@
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
-    http::{Request, StatusCode},
+    http::{HeaderMap, Request, StatusCode},
     response::{IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{sync::Arc, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -50,12 +50,48 @@ impl CryptoKey {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum IssuerMode {
+    Static(Arc<str>),
+    FromHost {
+        scheme: Arc<str>,
+        trust_forwarded_headers: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IssuerError;
+
+impl IssuerError {
+    const MESSAGE: &'static str = "unable to derive issuer from request host";
+}
+
+impl fmt::Display for IssuerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(Self::MESSAGE)
+    }
+}
+
+impl std::error::Error for IssuerError {}
+
+impl IntoResponse for IssuerError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": Self::MESSAGE,
+            })),
+        )
+            .into_response()
+    }
+}
+
 #[derive(Clone)]
 pub struct ServerState {
-    pub issuer: Arc<str>,
+    pub issuer_mode: IssuerMode,
     pub algorithms: Arc<[KeySignAlgorithm]>,
     keys: Arc<HashMap<KeySignAlgorithm, CryptoKey>>,
-    openid_config: Arc<Value>,
+    static_openid_config: Option<Arc<Value>>,
     jwks_response: Arc<Value>,
     #[cfg(not(feature = "headless"))]
     cached_html: Arc<str>,
@@ -63,16 +99,13 @@ pub struct ServerState {
 
 impl ServerState {
     pub fn new(
-        issuer: String,
+        issuer_mode: IssuerMode,
         algorithms: Vec<KeySignAlgorithm>,
         rsa_key: RsaPrivateKey,
         ecdsa_p256_key: EcdsaPrivateKey,
         ecdsa_p384_key: EcdsaPrivateKey,
         ecdsa_p521_key: EcdsaPrivateKey,
     ) -> Self {
-        let issuer: Arc<str> = Arc::from(issuer.as_str());
-        let jwks_uri = format!("{}/.well-known/jwks.json", issuer);
-
         let rsa_key_arc = Arc::new(rsa_key);
         let ecdsa_p256_arc = Arc::new(ecdsa_p256_key);
         let ecdsa_p384_arc = Arc::new(ecdsa_p384_key);
@@ -117,17 +150,27 @@ impl ServerState {
             "keys": jwk_keys
         }));
 
-        let openid_config = Arc::new(json!({
-            "issuer": issuer.as_ref(),
-            "jwks_uri": jwks_uri,
-        }));
+        let static_openid_config = match &issuer_mode {
+            IssuerMode::Static(issuer) => {
+                let jwks_uri = format!("{}/.well-known/jwks.json", issuer);
+                Some(Arc::new(json!({
+                    "issuer": issuer.as_ref(),
+                    "jwks_uri": jwks_uri,
+                })))
+            }
+            IssuerMode::FromHost { .. } => None,
+        };
 
         #[cfg(not(feature = "headless"))]
         let cached_html = {
             const TEMPLATE: &str = include_str!("../website/index.html");
             const VERSION: &str = env!("CARGO_PKG_VERSION");
+            let issuer_label = match &issuer_mode {
+                IssuerMode::Static(issuer) => issuer.to_string(),
+                IssuerMode::FromHost { scheme, .. } => format!("{scheme}://{{host}}"),
+            };
             let html = TEMPLATE
-                .replace("{{ISSUER}}", &issuer)
+                .replace("{{ISSUER}}", &issuer_label)
                 .replace("{{VERSION}}", VERSION);
             let html = if std::env::var("JWKSERVE_ENABLE_TRACKING").as_deref() == Ok("true") {
                 const TRACKING_SCRIPT: &str = r#"    <script defer src="https://track.heft.io/tracker.js" data-site-id="d4308e95-5ecf-46a9-8602-fae51ade4ba4"></script>
@@ -140,10 +183,10 @@ impl ServerState {
         };
 
         Self {
-            issuer,
+            issuer_mode,
             algorithms: Arc::from(algorithms),
             keys: Arc::new(key_map),
-            openid_config,
+            static_openid_config,
             jwks_response,
             #[cfg(not(feature = "headless"))]
             cached_html,
@@ -152,6 +195,86 @@ impl ServerState {
 
     fn get_key(&self, algorithm: &KeySignAlgorithm) -> Option<&CryptoKey> {
         self.keys.get(algorithm)
+    }
+
+    pub fn issuer_for_headers(&self, headers: &HeaderMap) -> Result<String, IssuerError> {
+        match &self.issuer_mode {
+            IssuerMode::Static(issuer) => Ok(issuer.to_string()),
+            IssuerMode::FromHost {
+                scheme,
+                trust_forwarded_headers,
+            } => {
+                let host = if *trust_forwarded_headers {
+                    match Self::first_header_value(headers, "x-forwarded-host")? {
+                        Some(host) => host,
+                        None => Self::first_header_value(headers, "host")?.ok_or(IssuerError)?,
+                    }
+                } else {
+                    Self::first_header_value(headers, "host")?.ok_or(IssuerError)?
+                };
+
+                let scheme = if *trust_forwarded_headers {
+                    match Self::first_header_value(headers, "x-forwarded-proto")? {
+                        Some(proto) => proto,
+                        None => scheme.to_string(),
+                    }
+                } else {
+                    scheme.to_string()
+                };
+
+                let host = Self::validate_host(&host)?;
+                let scheme = Self::validate_scheme(&scheme)?;
+
+                Ok(format!("{scheme}://{host}"))
+            }
+        }
+    }
+
+    pub fn openid_config_for_headers(&self, headers: &HeaderMap) -> Result<Value, IssuerError> {
+        if let Some(config) = &self.static_openid_config {
+            return Ok((**config).clone());
+        }
+
+        let issuer = self.issuer_for_headers(headers)?;
+
+        Ok(json!({
+            "issuer": issuer,
+            "jwks_uri": format!("{issuer}/.well-known/jwks.json"),
+        }))
+    }
+
+    fn first_header_value(headers: &HeaderMap, name: &str) -> Result<Option<String>, IssuerError> {
+        let Some(value) = headers.get(name) else {
+            return Ok(None);
+        };
+
+        let value = value.to_str().map_err(|_| IssuerError)?;
+        let first = value.split(',').next().unwrap_or_default().trim();
+
+        Ok(Some(first.to_string()))
+    }
+
+    fn validate_scheme(scheme: &str) -> Result<String, IssuerError> {
+        let scheme = scheme.trim().to_ascii_lowercase();
+
+        match scheme.as_str() {
+            "http" | "https" => Ok(scheme),
+            _ => Err(IssuerError),
+        }
+    }
+
+    fn validate_host(host: &str) -> Result<String, IssuerError> {
+        let host = host.trim();
+
+        if host.is_empty()
+            || host
+                .chars()
+                .any(|ch| matches!(ch, '/' | '\\' | '?' | '#' | '\r' | '\n'))
+        {
+            return Err(IssuerError);
+        }
+
+        Ok(host.to_string())
     }
 }
 
@@ -271,10 +394,12 @@ fn get_mime_type(path: &str) -> &'static str {
 ///
 /// Returns OpenID Provider configuration metadata as defined in
 /// OpenID Connect Discovery 1.0 specification.
-/// Response is pre-computed at startup to avoid allocations on each request.
-async fn openid_discovery(State(state): State<ServerState>) -> Json<Value> {
-    // Arc clone is cheap (just ref count increment)
-    Json((*state.openid_config).clone())
+/// Response is pre-computed at startup for static issuers.
+async fn openid_discovery(State(state): State<ServerState>, headers: HeaderMap) -> Response {
+    match state.openid_config_for_headers(&headers) {
+        Ok(config) => Json(config).into_response(),
+        Err(err) => err.into_response(),
+    }
 }
 
 /// JSON Web Key Set (JWKS) endpoint
@@ -303,8 +428,17 @@ async fn jwks(State(state): State<ServerState>) -> Json<Value> {
 /// POST /sign
 /// {"sub": "user123", "aud": "my-app"}
 /// ```
-async fn sign_default(State(state): State<ServerState>, Json(claims): Json<Value>) -> Response {
-    sign_with_algorithm(state, KeySignAlgorithm::RS256, claims).await
+async fn sign_default(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(claims): Json<Value>,
+) -> Response {
+    let issuer = match state.issuer_for_headers(&headers) {
+        Ok(issuer) => issuer,
+        Err(err) => return err.into_response(),
+    };
+
+    sign_with_algorithm(state, KeySignAlgorithm::RS256, claims, issuer).await
 }
 
 /// JWT signing endpoint with explicit algorithm
@@ -328,13 +462,21 @@ async fn sign_default(State(state): State<ServerState>, Json(claims): Json<Value
 /// ```
 async fn sign_algorithm(
     State(state): State<ServerState>,
+    headers: HeaderMap,
     Path(algorithm_str): Path<String>,
     Json(claims): Json<Value>,
 ) -> Response {
     use std::str::FromStr;
 
     match KeySignAlgorithm::from_str(&algorithm_str) {
-        Ok(algorithm) => sign_with_algorithm(state, algorithm, claims).await,
+        Ok(algorithm) => {
+            let issuer = match state.issuer_for_headers(&headers) {
+                Ok(issuer) => issuer,
+                Err(err) => return err.into_response(),
+            };
+
+            sign_with_algorithm(state, algorithm, claims, issuer).await
+        }
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(json!({
@@ -349,10 +491,11 @@ async fn sign_with_algorithm(
     state: ServerState,
     algorithm: KeySignAlgorithm,
     mut claims: Value,
+    issuer: String,
 ) -> Response {
     if let Some(claims_obj) = claims.as_object_mut() {
         if !claims_obj.contains_key("iss") {
-            claims_obj.insert("iss".to_string(), json!(state.issuer.as_ref()));
+            claims_obj.insert("iss".to_string(), json!(issuer));
         }
     }
 
@@ -371,5 +514,114 @@ async fn sign_with_algorithm(
             })),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn fixture_path(name: &str) -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join(name)
+    }
+
+    fn dynamic_state(scheme: &str, trust_forwarded_headers: bool) -> ServerState {
+        let rsa_fixture = fixture_path("rsa_2048.pem");
+        let ecdsa_p256_fixture = fixture_path("ecdsa_p256.pem");
+        let ecdsa_p384_fixture = fixture_path("ecdsa_p384.pem");
+        let ecdsa_p521_fixture = fixture_path("ecdsa_p521.pem");
+        let rsa_key = RsaPrivateKey::from_pem_file(&rsa_fixture).unwrap();
+        let ecdsa_p256_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p256_fixture).unwrap();
+        let ecdsa_p384_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p384_fixture).unwrap();
+        let ecdsa_p521_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p521_fixture).unwrap();
+
+        ServerState::new(
+            IssuerMode::FromHost {
+                scheme: Arc::from(scheme),
+                trust_forwarded_headers,
+            },
+            vec![KeySignAlgorithm::RS256, KeySignAlgorithm::ES256],
+            rsa_key,
+            ecdsa_p256_key,
+            ecdsa_p384_key,
+            ecdsa_p521_key,
+        )
+    }
+
+    #[test]
+    fn test_dynamic_issuer_requires_host_header() {
+        let state = dynamic_state("http", false);
+        let headers = HeaderMap::new();
+
+        assert_eq!(state.issuer_for_headers(&headers), Err(IssuerError));
+    }
+
+    #[test]
+    fn test_dynamic_issuer_rejects_invalid_host() {
+        let state = dynamic_state("http", false);
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "tenant-a.test/path".parse().unwrap());
+
+        assert_eq!(state.issuer_for_headers(&headers), Err(IssuerError));
+    }
+
+    #[test]
+    fn test_dynamic_issuer_uses_forwarded_header_first_values() {
+        let state = dynamic_state("http", true);
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "internal.local".parse().unwrap());
+        headers.insert(
+            "x-forwarded-host",
+            "tenant-a.test, proxy.local".parse().unwrap(),
+        );
+        headers.insert("x-forwarded-proto", "https, http".parse().unwrap());
+
+        assert_eq!(
+            state.issuer_for_headers(&headers).unwrap(),
+            "https://tenant-a.test"
+        );
+    }
+
+    #[test]
+    fn test_dynamic_issuer_falls_back_to_configured_scheme() {
+        let state = dynamic_state("https", true);
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "tenant-c.test".parse().unwrap());
+
+        assert_eq!(
+            state.issuer_for_headers(&headers).unwrap(),
+            "https://tenant-c.test"
+        );
+    }
+
+    #[test]
+    fn test_static_openid_config_is_cached() {
+        let rsa_fixture = fixture_path("rsa_2048.pem");
+        let ecdsa_p256_fixture = fixture_path("ecdsa_p256.pem");
+        let ecdsa_p384_fixture = fixture_path("ecdsa_p384.pem");
+        let ecdsa_p521_fixture = fixture_path("ecdsa_p521.pem");
+        let rsa_key = RsaPrivateKey::from_pem_file(&rsa_fixture).unwrap();
+        let ecdsa_p256_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p256_fixture).unwrap();
+        let ecdsa_p384_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p384_fixture).unwrap();
+        let ecdsa_p521_key = EcdsaPrivateKey::from_pem_file(&ecdsa_p521_fixture).unwrap();
+        let state = ServerState::new(
+            IssuerMode::Static(Arc::from("http://localhost:3000")),
+            vec![KeySignAlgorithm::RS256, KeySignAlgorithm::ES256],
+            rsa_key,
+            ecdsa_p256_key,
+            ecdsa_p384_key,
+            ecdsa_p521_key,
+        );
+
+        let config = state.openid_config_for_headers(&HeaderMap::new()).unwrap();
+        assert_eq!(config.get("issuer").unwrap(), "http://localhost:3000");
+        assert_eq!(
+            config.get("jwks_uri").unwrap(),
+            "http://localhost:3000/.well-known/jwks.json"
+        );
     }
 }

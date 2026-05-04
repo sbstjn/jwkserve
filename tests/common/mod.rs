@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 
 use jwkserve::{
     key::{EcdsaCurve, EcdsaPrivateKey, RsaPrivateKey},
-    router::{build_router, ServerState},
+    router::{build_router, IssuerMode, ServerState},
     KeySignAlgorithm,
 };
 
@@ -90,15 +90,57 @@ impl TestServer {
         Self::spawn_with_key(algorithms, key).await
     }
 
+    /// Spawn a test server with dynamic issuer derivation.
+    #[allow(dead_code)]
+    pub async fn spawn_dynamic(
+        key_size: usize,
+        algorithms: Vec<KeySignAlgorithm>,
+        scheme: &str,
+        trust_forwarded_headers: bool,
+    ) -> color_eyre::Result<Self> {
+        let key = load_fixture_key(key_size)?;
+        let port = find_available_port()?;
+        let issuer_mode = IssuerMode::FromHost {
+            scheme: scheme.into(),
+            trust_forwarded_headers,
+        };
+
+        Self::spawn_with_mode(
+            port,
+            algorithms,
+            key,
+            issuer_mode,
+            format!("{scheme}://{{host}}"),
+        )
+        .await
+    }
+
     /// Spawn a test server with a provided key (for testing key generation)
     pub async fn spawn_with_key(
         algorithms: Vec<KeySignAlgorithm>,
         key: RsaPrivateKey,
     ) -> color_eyre::Result<Self> {
         let port = find_available_port()?;
-        let bind_addr = format!("127.0.0.1:{port}");
         let issuer = format!("http://localhost:{port}");
-        let base_url = issuer.clone();
+        Self::spawn_with_mode(
+            port,
+            algorithms,
+            key,
+            IssuerMode::Static(issuer.clone().into()),
+            issuer,
+        )
+        .await
+    }
+
+    async fn spawn_with_mode(
+        port: u16,
+        algorithms: Vec<KeySignAlgorithm>,
+        key: RsaPrivateKey,
+        issuer_mode: IssuerMode,
+        issuer: String,
+    ) -> color_eyre::Result<Self> {
+        let bind_addr = format!("127.0.0.1:{port}");
+        let base_url = format!("http://127.0.0.1:{port}");
 
         // Use ECDSA fixture keys for deterministic testing
         let ecdsa_p256 = load_ecdsa_fixture_key(EcdsaCurve::P256)?;
@@ -107,7 +149,7 @@ impl TestServer {
 
         // Build router with state
         let state = ServerState::new(
-            issuer.clone(),
+            issuer_mode,
             algorithms,
             key,
             ecdsa_p256,
@@ -158,6 +200,26 @@ impl TestServer {
         claims: serde_json::Value,
         algorithm: Option<&str>,
     ) -> color_eyre::Result<String> {
+        self.sign_jwt_with_headers(claims, algorithm, &[]).await
+    }
+
+    #[allow(dead_code)]
+    pub async fn sign_jwt_with_host(
+        &self,
+        claims: serde_json::Value,
+        algorithm: Option<&str>,
+        host: &str,
+    ) -> color_eyre::Result<String> {
+        self.sign_jwt_with_headers(claims, algorithm, &[("host", host)])
+            .await
+    }
+
+    pub async fn sign_jwt_with_headers(
+        &self,
+        claims: serde_json::Value,
+        algorithm: Option<&str>,
+        headers: &[(&str, &str)],
+    ) -> color_eyre::Result<String> {
         let url = if let Some(alg) = algorithm {
             // Use algorithm name directly in URL path
             format!("{}/sign/{}", self.base_url, alg.to_uppercase())
@@ -166,8 +228,12 @@ impl TestServer {
         };
 
         let client = reqwest::Client::new();
-        let response = client
-            .post(&url)
+        let mut request = client.post(&url);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+
+        let response = request
             .json(&claims)
             .send()
             .await?
@@ -192,9 +258,42 @@ impl TestServer {
     /// Fetch OpenID configuration
     #[allow(dead_code)]
     pub async fn fetch_openid_config(&self) -> color_eyre::Result<serde_json::Value> {
-        let url = format!("{}/.well-known/openid-configuration", self.base_url);
-        let config = reqwest::get(&url).await?.json().await?;
+        self.fetch_openid_config_with_headers(&[]).await
+    }
+
+    #[allow(dead_code)]
+    pub async fn fetch_openid_config_with_host(
+        &self,
+        host: &str,
+    ) -> color_eyre::Result<serde_json::Value> {
+        self.fetch_openid_config_with_headers(&[("host", host)])
+            .await
+    }
+
+    #[allow(dead_code)]
+    pub async fn fetch_openid_config_with_headers(
+        &self,
+        headers: &[(&str, &str)],
+    ) -> color_eyre::Result<serde_json::Value> {
+        let response = self
+            .fetch_openid_config_response_with_headers(headers)
+            .await?;
+        let config = response.json().await?;
         Ok(config)
+    }
+
+    #[allow(dead_code)]
+    pub async fn fetch_openid_config_response_with_headers(
+        &self,
+        headers: &[(&str, &str)],
+    ) -> color_eyre::Result<reqwest::Response> {
+        let url = format!("{}/.well-known/openid-configuration", self.base_url);
+        let client = reqwest::Client::new();
+        let mut request = client.get(&url);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        Ok(request.send().await?)
     }
 }
 
