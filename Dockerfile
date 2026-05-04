@@ -1,20 +1,14 @@
-FROM amazonlinux:2023 AS builder
+FROM alpine:3.23.4 AS builder
 
 ARG TARGETARCH
 
-ENV CARGO_HOME=/root/.cargo \
-    PATH=/root/.cargo/bin:$PATH
-
-RUN dnf install -y \
+RUN apk add --no-cache \
+      build-base \
       ca-certificates \
+      cargo \
       cmake \
-      gcc \
-      gcc-c++ \
-      make \
-      perl-core \
-    && dnf clean all
-
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable
+      perl \
+      rust
 
 WORKDIR /app
 COPY . .
@@ -24,8 +18,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/app/target \
     set -eux; \
     case "$TARGETARCH" in \
-      arm64) prebuilt_binary="target/aarch64-unknown-linux-gnu/release/jwkserve" ;; \
-      amd64) prebuilt_binary="target/x86_64-unknown-linux-gnu/release/jwkserve" ;; \
+      arm64) prebuilt_binary="target/aarch64-unknown-linux-musl/release/jwkserve" ;; \
+      amd64) prebuilt_binary="target/x86_64-unknown-linux-musl/release/jwkserve" ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
     if [ -f "$prebuilt_binary" ]; then \
@@ -39,7 +33,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     fi; \
     chmod +x /tmp/jwkserve
 
-FROM amazonlinux:2023 AS default
+FROM alpine:3.23.4 AS default
+
+RUN apk add --no-cache \
+      ca-certificates \
+      libgcc \
+      libstdc++
 
 COPY --from=builder /tmp/jwkserve /usr/local/bin/jwkserve
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
