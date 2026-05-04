@@ -1,0 +1,14 @@
+.git
+.github
+ai
+build-context
+docs
+infrastructure
+scripts
+target
+tests
+.gitignore
+docker-compose.yaml
+LICENSE.md
+package.json
+README.md

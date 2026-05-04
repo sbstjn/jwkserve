@@ -178,3 +178,27 @@ async fn test_tampered_signature_fails_verification() {
         "Should fail to verify token with tampered signature"
     );
 }
+
+#[tokio::test]
+async fn test_dynamic_invalid_host_returns_clear_error() {
+    let server = TestServer::spawn_dynamic(2048, vec![KeySignAlgorithm::RS256], "http", false)
+        .await
+        .expect("Failed to spawn server");
+
+    let response = server
+        .fetch_openid_config_response_with_headers(&[("host", "tenant-a.test/path")])
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 for invalid Host in dynamic issuer mode"
+    );
+
+    let error_response: serde_json::Value = response.json().await.expect("Failed to parse error");
+    assert_eq!(
+        error_response.get("error").and_then(|value| value.as_str()),
+        Some("unable to derive issuer from request host")
+    );
+}
