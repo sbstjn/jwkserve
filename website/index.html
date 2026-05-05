@@ -598,11 +598,11 @@
                         <div style="display: flex; flex-direction: column; gap: 1rem;">
                             <div>
                                 <div style="font-size: 0.875rem; color: #a8a8b8; margin-bottom: 0.5rem; font-weight: 600;">OpenID Configuration</div>
-                                <a id="openid-link" href="/.well-known/openid-configuration" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/openid-configuration</a>
+                                <a id="openid-link" href="/.well-known/openid-configuration" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">/.well-known/openid-configuration</a>
                             </div>
                             <div>
                                 <div style="font-size: 0.875rem; color: #a8a8b8; margin-bottom: 0.5rem; font-weight: 600;">JSON Web Key Set (JWKS)</div>
-                                <a id="jwks-link" href="/.well-known/jwks.json" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">{{ISSUER}}/.well-known/jwks.json</a>
+                                <a id="jwks-link" href="/.well-known/jwks.json" target="_blank" style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 0.875rem; color: #a8d5ff; text-decoration: none; word-break: break-all;">/.well-known/jwks.json</a>
                             </div>
                         </div>
                     </div>
@@ -654,18 +654,65 @@
             return IS_DYNAMIC_ISSUER ? getRuntimeOrigin() : STATIC_ISSUER;
         }
 
+        function isLoopbackHostname(hostname) {
+            return hostname === 'localhost'
+                || hostname === '127.0.0.1'
+                || hostname === '::1'
+                || hostname === '[::1]';
+        }
+
+        function shouldStripDynamicIssuer(issuer) {
+            if (!IS_DYNAMIC_ISSUER || typeof issuer !== 'string') {
+                return false;
+            }
+
+            const trimmed = issuer.trim();
+
+            if (!trimmed) {
+                return true;
+            }
+
+            if (trimmed === STATIC_ISSUER || trimmed === getRuntimeOrigin()) {
+                return true;
+            }
+
+            try {
+                const url = new URL(trimmed);
+                return (url.protocol === 'http:' || url.protocol === 'https:')
+                    && isLoopbackHostname(url.hostname);
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function normalizeClaimsObject(claims) {
+            if (!claims || typeof claims !== 'object' || Array.isArray(claims)) {
+                return false;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(claims, 'iss') && shouldStripDynamicIssuer(claims.iss)) {
+                delete claims.iss;
+                return true;
+            }
+
+            return false;
+        }
+
         function updateIssuerDisplay() {
             const issuer = getDisplayIssuer();
+            const endpointOrigin = getRuntimeOrigin();
             const openidLink = document.getElementById('openid-link');
             const jwksLink = document.getElementById('jwks-link');
             const issuerDisplay = document.getElementById('issuer-display');
 
             if (openidLink) {
-                openidLink.textContent = `${issuer}/.well-known/openid-configuration`;
+                openidLink.href = `${endpointOrigin}/.well-known/openid-configuration`;
+                openidLink.textContent = `${endpointOrigin}/.well-known/openid-configuration`;
             }
 
             if (jwksLink) {
-                jwksLink.textContent = `${issuer}/.well-known/jwks.json`;
+                jwksLink.href = `${endpointOrigin}/.well-known/jwks.json`;
+                jwksLink.textContent = `${endpointOrigin}/.well-known/jwks.json`;
             }
 
             if (issuerDisplay) {
@@ -681,8 +728,7 @@
             try {
                 const claims = JSON.parse(claimsText);
 
-                if (claims && typeof claims === 'object' && !Array.isArray(claims) && claims.iss === STATIC_ISSUER) {
-                    delete claims.iss;
+                if (normalizeClaimsObject(claims)) {
                     return JSON.stringify(claims, null, 2);
                 }
             } catch (e) {
@@ -968,6 +1014,15 @@
 
             claimsTextarea.classList.remove('error');
 
+            if (normalizeClaimsObject(claims)) {
+                const normalizedClaimsText = JSON.stringify(claims, null, 2);
+                if (claimsTextarea.value !== normalizedClaimsText) {
+                    claimsTextarea.value = normalizedClaimsText;
+                    updateTimestampDisplay();
+                    saveClaims();
+                }
+            }
+
             if (currentRequest) {
                 currentRequest.abort();
             }
@@ -1068,10 +1123,6 @@
                 "iat": now,
                 "exp": exp
             };
-
-            if (!IS_DYNAMIC_ISSUER) {
-                initialClaims.iss = STATIC_ISSUER;
-            }
             
             claimsTextarea.value = JSON.stringify(initialClaims, null, 2);
         }

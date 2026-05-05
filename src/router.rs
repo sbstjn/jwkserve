@@ -637,13 +637,31 @@ mod tests {
         assert!(state
             .cached_html
             .contains("const endpoint = algorithm ? `/sign/${algorithm}` : '/sign';"));
+        assert!(state
+            .cached_html
+            .contains("const endpointOrigin = getRuntimeOrigin();"));
+        assert!(state
+            .cached_html
+            .contains("openidLink.href = `${endpointOrigin}/.well-known/openid-configuration`;"));
+        assert!(state
+            .cached_html
+            .contains("jwksLink.href = `${endpointOrigin}/.well-known/jwks.json`;"));
         assert!(state.cached_html.contains("if (!IS_DYNAMIC_ISSUER) {"));
+        assert!(state
+            .cached_html
+            .contains("function shouldStripDynamicIssuer(issuer) {"));
+        assert!(state
+            .cached_html
+            .contains("trimmed === STATIC_ISSUER || trimmed === getRuntimeOrigin()"));
+        assert!(state
+            .cached_html
+            .contains("isLoopbackHostname(url.hostname)"));
         assert!(!state.cached_html.contains("\"iss\": \"https://{host}\""));
     }
 
     #[cfg(not(feature = "headless"))]
     #[test]
-    fn test_static_html_keeps_static_issuer_defaults() {
+    fn test_static_html_keeps_static_issuer_config_without_default_iss() {
         let rsa_fixture = fixture_path("rsa_2048.pem");
         let ecdsa_p256_fixture = fixture_path("ecdsa_p256.pem");
         let ecdsa_p384_fixture = fixture_path("ecdsa_p384.pem");
@@ -668,6 +686,10 @@ mod tests {
             .cached_html
             .contains("const STATIC_ISSUER = 'https://issuer.example';"));
         assert!(state
+            .cached_html
+            .contains(">/.well-known/openid-configuration</a>"));
+        assert!(state.cached_html.contains(">/.well-known/jwks.json</a>"));
+        assert!(!state
             .cached_html
             .contains("initialClaims.iss = STATIC_ISSUER;"));
     }
