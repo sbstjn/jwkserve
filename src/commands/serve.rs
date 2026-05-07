@@ -24,18 +24,18 @@ pub struct ArgsServe {
     #[arg(short, long, value_name = "URL", conflicts_with = "issuer_from_host")]
     pub issuer: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, conflicts_with = "issuer")]
     pub issuer_from_host: bool,
 
     #[arg(
         long,
         value_name = "SCHEME",
         value_parser = ["http", "https"],
-        requires = "issuer_from_host"
+        conflicts_with = "issuer"
     )]
     pub issuer_scheme: Option<String>,
 
-    #[arg(long, requires = "issuer_from_host")]
+    #[arg(long, conflicts_with = "issuer")]
     pub trust_forwarded_headers: bool,
 
     #[arg(short, long = "algorithm", value_enum, value_name = "ALG")]
@@ -43,18 +43,6 @@ pub struct ArgsServe {
 
     #[arg(short, long = "key", value_name = "FILE")]
     pub key_files: Vec<PathBuf>,
-}
-
-fn generate_issuer(bind: &IpAddr, port: u16) -> String {
-    let host = if bind.is_unspecified() {
-        "localhost"
-    } else if bind.is_ipv6() {
-        return format!("http://[{bind}]:{port}");
-    } else {
-        &bind.to_string()
-    };
-
-    format!("http://{host}:{port}")
 }
 
 fn validate_issuer_url(url_str: &str) -> color_eyre::Result<()> {
@@ -94,6 +82,35 @@ fn validate_issuer_url(url_str: &str) -> color_eyre::Result<()> {
 fn validate_bind_address(addr: &str) -> color_eyre::Result<IpAddr> {
     addr.parse::<IpAddr>()
         .map_err(|_| color_eyre::eyre::eyre!("invalid bind address: {}", addr))
+}
+
+fn resolve_issuer_mode(args: &ArgsServe) -> color_eyre::Result<(IssuerMode, String)> {
+    if let Some(ref issuer_url) = args.issuer {
+        validate_issuer_url(issuer_url)?;
+        return Ok((
+            IssuerMode::Static(Arc::from(issuer_url.as_str())),
+            format!("for issuer {}", issuer_url),
+        ));
+    }
+
+    let scheme = args.issuer_scheme.as_deref().unwrap_or("http").to_string();
+    let trust_forwarded_headers = args.trust_forwarded_headers;
+
+    Ok((
+        IssuerMode::FromHost {
+            scheme: Arc::from(scheme.as_str()),
+            trust_forwarded_headers,
+        },
+        format!(
+            "with issuer derived from request host using scheme {}{}",
+            scheme,
+            if trust_forwarded_headers {
+                " and trusted forwarded headers"
+            } else {
+                ""
+            }
+        ),
+    ))
 }
 
 struct KeyCollection {
@@ -148,37 +165,7 @@ pub async fn handle_serve(args: &ArgsServe) -> color_eyre::Result<()> {
 
     let bind_ip = validate_bind_address(&args.bind)?;
 
-    let (issuer_mode, listen_log) = if args.issuer_from_host {
-        let scheme = args.issuer_scheme.as_deref().unwrap_or("http").to_string();
-        let trust_forwarded_headers = args.trust_forwarded_headers;
-        (
-            IssuerMode::FromHost {
-                scheme: Arc::from(scheme.as_str()),
-                trust_forwarded_headers,
-            },
-            format!(
-                "with issuer derived from request host using scheme {}{}",
-                scheme,
-                if trust_forwarded_headers {
-                    " and trusted forwarded headers"
-                } else {
-                    ""
-                }
-            ),
-        )
-    } else {
-        let issuer = if let Some(ref issuer_url) = args.issuer {
-            validate_issuer_url(issuer_url)?;
-            issuer_url.clone()
-        } else {
-            generate_issuer(&bind_ip, args.port)
-        };
-
-        (
-            IssuerMode::Static(Arc::from(issuer.as_str())),
-            format!("for issuer {}", issuer),
-        )
-    };
+    let (issuer_mode, listen_log) = resolve_issuer_mode(args)?;
 
     let algorithms = if args.algorithms.is_empty() {
         &[
@@ -275,27 +262,24 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_issuer_localhost() {
-        let bind = "127.0.0.1".parse::<IpAddr>().unwrap();
-        assert_eq!(generate_issuer(&bind, 3000), "http://127.0.0.1:3000");
-    }
+    fn test_default_mode_uses_request_host() {
+        let args = ServeCli::try_parse_from(["jwkserve"]).unwrap().args;
+        let (issuer_mode, listen_log) = resolve_issuer_mode(&args).unwrap();
 
-    #[test]
-    fn test_generate_issuer_unspecified() {
-        let bind = "0.0.0.0".parse::<IpAddr>().unwrap();
-        assert_eq!(generate_issuer(&bind, 8080), "http://localhost:8080");
-    }
-
-    #[test]
-    fn test_generate_issuer_ipv6() {
-        let bind = "::1".parse::<IpAddr>().unwrap();
-        assert_eq!(generate_issuer(&bind, 3000), "http://[::1]:3000");
-    }
-
-    #[test]
-    fn test_generate_issuer_ipv6_unspecified() {
-        let bind = "::".parse::<IpAddr>().unwrap();
-        assert_eq!(generate_issuer(&bind, 9000), "http://localhost:9000");
+        assert_eq!(
+            listen_log,
+            "with issuer derived from request host using scheme http"
+        );
+        match issuer_mode {
+            IssuerMode::FromHost {
+                scheme,
+                trust_forwarded_headers,
+            } => {
+                assert_eq!(&*scheme, "http");
+                assert!(!trust_forwarded_headers);
+            }
+            IssuerMode::Static(_) => panic!("expected dynamic issuer mode by default"),
+        }
     }
 
     #[test]
@@ -327,16 +311,45 @@ mod tests {
     }
 
     #[test]
-    fn test_issuer_scheme_requires_issuer_from_host() {
-        let result = ServeCli::try_parse_from(["jwkserve", "--issuer-scheme", "https"]);
+    fn test_issuer_scheme_is_allowed_without_issuer_from_host() {
+        let args = ServeCli::try_parse_from(["jwkserve", "--issuer-scheme", "https"])
+            .unwrap()
+            .args;
+        let (issuer_mode, _) = resolve_issuer_mode(&args).unwrap();
 
-        assert!(result.is_err());
+        match issuer_mode {
+            IssuerMode::FromHost { scheme, .. } => assert_eq!(&*scheme, "https"),
+            IssuerMode::Static(_) => panic!("expected dynamic issuer mode"),
+        }
     }
 
     #[test]
-    fn test_trust_forwarded_headers_requires_issuer_from_host() {
-        let result = ServeCli::try_parse_from(["jwkserve", "--trust-forwarded-headers"]);
+    fn test_trust_forwarded_headers_is_allowed_without_issuer_from_host() {
+        let args = ServeCli::try_parse_from(["jwkserve", "--trust-forwarded-headers"])
+            .unwrap()
+            .args;
+        let (issuer_mode, _) = resolve_issuer_mode(&args).unwrap();
 
-        assert!(result.is_err());
+        match issuer_mode {
+            IssuerMode::FromHost {
+                trust_forwarded_headers,
+                ..
+            } => assert!(trust_forwarded_headers),
+            IssuerMode::Static(_) => panic!("expected dynamic issuer mode"),
+        }
+    }
+
+    #[test]
+    fn test_explicit_issuer_stays_static() {
+        let args = ServeCli::try_parse_from(["jwkserve", "--issuer", "https://issuer.example"])
+            .unwrap()
+            .args;
+        let (issuer_mode, listen_log) = resolve_issuer_mode(&args).unwrap();
+
+        assert_eq!(listen_log, "for issuer https://issuer.example");
+        match issuer_mode {
+            IssuerMode::Static(issuer) => assert_eq!(&*issuer, "https://issuer.example"),
+            IssuerMode::FromHost { .. } => panic!("expected static issuer mode"),
+        }
     }
 }
